@@ -112,6 +112,9 @@ type view struct {
 	w, h       int
 	hour, mins int
 	doorTicks  int // indoors: toggle every door and let them move this long
+	// input, when set, drives the party from the map's start with a ui.Script through
+	// World.Update; the frame shows the party's view.
+	input string
 }
 
 // Frozen SHA-256s of the composed frames. Regenerate with:
@@ -126,6 +129,9 @@ var worldHashes = map[string]string{
 	"d13_torch":   "3ec4f5fdd302c993bc3b41259e382500977a823f68c612629b7c2d9e63745739",
 	"d16_start":   "1ed937f988d98768f3890db3aa3c0444150828f1b6bd50f2b348a34cd1f92fcc",
 	"d28_stairs":  "310a9898b2a87104a27c86270c2a116cce6547ac9c341e2201a8a78b41df9340",
+	"d28_climb":   "91c8bfcdcf7590146f3f6a86fad0e858df0b6696f213ca70a0f7672592acfbcb",
+	"out01_run":   "583d74b3518c4db90df9a0372b3bb9569b9eb7c7276260be74d586999e6d1813",
+	"d05_walk":    "a05ced4a117cb042789b7a6f6b8606f2579c1ba00592eaea90f4930e125ae796",
 }
 
 var views = []view{
@@ -138,6 +144,10 @@ var views = []view{
 	{name: "d13_torch", mapName: "d13.blv", cam: &FreeCam{X: -1650, Y: 3176, Z: -1545}, w: 640, h: 480},
 	{name: "d16_start", mapName: "d16.blv", w: 1280, h: 720},
 	{name: "d28_stairs", mapName: "d28.blv", cam: &FreeCam{X: 0, Y: -448, Z: 0, Pitch: 60}, w: 1280, h: 720},
+	// M4: the party walking (party mode, the original's default keys)
+	{name: "d28_climb", mapName: "d28.blv", input: "Left:14,Up:45,Delete:1,-:2,Delete:1", w: 640, h: 480},
+	{name: "out01_run", mapName: "out01.odm", input: "Up+Shift:150,PgDn:1,-:2,PgDn:1", w: 640, h: 480, hour: 9},
+	{name: "d05_walk", mapName: "d05.blv", input: "Up:90,Right:20", w: 640, h: 480},
 }
 
 func TestGolden(t *testing.T) {
@@ -146,6 +156,18 @@ func TestGolden(t *testing.T) {
 		t.Run(v.name, func(t *testing.T) {
 			a := e.app(t, v.mapName)
 			w := a.World().(*World)
+			w.FreeCamOn = v.input == "" // the M3 views
+			if v.input != "" {
+				sc, err := ui.ParseScript(v.input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for !sc.Done() {
+					in := &ui.Input{}
+					sc.Next(in)
+					w.Update(in)
+				}
+			}
 			if v.cam != nil {
 				w.Cam = *v.cam
 				if w.outdoor != nil {

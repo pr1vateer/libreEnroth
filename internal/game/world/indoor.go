@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"libre-enroth/internal/assets/desc"
+	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/maps/blv"
 	"libre-enroth/internal/maps/delta"
 	"libre-enroth/internal/render"
@@ -24,6 +25,7 @@ type Indoor struct {
 	faceU, faceV   [][]int16
 	faceDU, faceDV []int16
 	decLights      []render.PointLight // lights of decorations (Level_Load)
+	geo            *physics.IndoorGeo  // floors and collision for the party
 
 	// per-frame scratch
 	secRect  []rect
@@ -113,6 +115,8 @@ func NewIndoor(t *Tables, tex *TextureCache, blvBlob, dlvBlob []byte) (*Indoor, 
 			}
 		}
 	}
+	in.geo = &physics.IndoorGeo{Map: m, Decorations: collisionDecorations(t.Decs, in.decIdx, len(m.Decorations),
+		func(i int) (uint16, [3]int32) { return m.Decorations[i].Flags, m.Decorations[i].Pos })}
 	if in.Delta != nil {
 		for i := range in.Delta.Doors {
 			d := &in.Delta.Doors[i]
@@ -203,6 +207,9 @@ func (in *Indoor) doorFace(fi int, d *delta.Door, j int, dist int32) {
 	v0 := m.Vertices[f.Verts[0]]
 	f.Dist = -(f.Normal[0]*int32(v0.X) + f.Normal[1]*int32(v0.Y) + f.Normal[2]*int32(v0.Z))
 	f.DistF = -(float32(v0.X)*f.NormalF[0] + float32(v0.Y)*f.NormalF[1] + float32(v0.Z)*f.NormalF[2])
+	if f.Normal[2] != 0 {
+		f.ZCalc[2] = -int32((int64(f.Dist) << 16) / int64(f.Normal[2]))
+	}
 	ua, va := faceAxes(f)
 	u, v := make([]int16, len(f.Verts)), make([]int16, len(f.Verts))
 	minU, minV, maxU, maxV := int32(math.MaxInt32), int32(math.MaxInt32), int32(math.MinInt32), int32(math.MinInt32)
@@ -290,94 +297,21 @@ func (in *Indoor) ToggleDoors() {
 	}
 }
 
-// SectorAt is the sector containing a point, 0 for none: among the sectors whose
-// bounding box holds it (z within 0x40), the floor or portal face under the point
-// (crossing test in x/y) that is nearest below it.
+// SectorAt is the sector containing a point, 0 for none (physics.IndoorGeo.SectorAt
+// at the point rounded down).
 //
 // mm8: 0x499f5f (Indoor_GetSector)
 func (in *Indoor) SectorAt(x, y, z float64) int {
-	m := in.Map
-	px, py, pz := int(math.Floor(x)), int(math.Floor(y)), int(math.Floor(z))
-	var cands []int
-	for si := 1; si < len(m.Sectors); si++ {
-		s := &m.Sectors[si]
-		b := s.BBox
-		if px < int(b[0]) || px > int(b[1]) || py < int(b[2]) || py > int(b[3]) ||
-			pz < int(b[4])-0x40 || pz > int(b[5])+0x40 {
-			continue
-		}
-		for _, list := range [2][]int16{s.Floors, s.Portals} {
-			for _, fi := range list {
-				f := &m.Faces[fi]
-				if f.PolyType != blv.PolyFloor && f.PolyType != blv.PolySlopedFloor {
-					continue
-				}
-				if in.crossings(f, px, py) == 1 {
-					cands = append(cands, int(fi))
-				}
-			}
-		}
-	}
-	switch len(cands) {
-	case 0:
-		return 0
-	case 1:
-		return int(m.Faces[cands[0]].Sector)
-	}
-	best, bestD := 0, 0xffffff
-	for _, fi := range cands {
-		f := &m.Faces[fi]
-		var fz int
-		if f.PolyType == blv.PolyFloor {
-			fz = int(m.Vertices[f.Verts[0]].Z)
-		} else {
-			fz = int((int64(px)<<16*int64(f.ZCalc[0])>>16 + int64(py)<<16*int64(f.ZCalc[1])>>16 + int64(f.ZCalc[2]) + 0x8000) >> 16)
-		}
-		if d := pz - fz; d >= 0 && d < bestD {
-			best, bestD = int(f.Sector), d
-		}
-	}
-	return best
+	return in.Geo().SectorAt(int32(math.Floor(x)), int32(math.Floor(y)), int32(math.Floor(z)))
 }
 
-// crossings counts the edges of a face's x/y outline that a ray from (px, py) towards
-// -x crosses, stopping at 2 like the original.
-func (in *Indoor) crossings(f *blv.Face, px, py int) int {
-	m := in.Map
-	n := len(f.Verts)
-	cross := 0
-	for k := 0; k < n && cross < 2; k++ {
-		a, b := m.Vertices[f.Verts[k]], m.Vertices[f.Verts[(k+1)%n]]
-		if (py <= int(a.Y)) == (py <= int(b.Y)) {
-			continue
-		}
-		left := 0
-		if int(a.X) < px {
-			left |= 1
-		}
-		if int(b.X) < px {
-			left |= 2
-		}
-		if left == 3 {
-			continue
-		}
-		if left != 0 {
-			// x of the edge at py, 16.16 slope as in the original
-			var ix int
-			if a.X < b.X {
-				slope := (int64(b.X-a.X) << 16) / int64(b.Y-a.Y)
-				ix = int(a.X) + int(int64(py-int(a.Y))*slope>>16)
-			} else {
-				slope := (int64(a.X-b.X) << 16) / int64(a.Y-b.Y)
-				ix = int(b.X) + int(int64(py-int(b.Y))*slope>>16)
-			}
-			if ix <= px {
-				continue
-			}
-		}
-		cross++
+// Geo is the map's collision and floor geometry (without decorations for an Indoor
+// built by hand).
+func (in *Indoor) Geo() *physics.IndoorGeo {
+	if in.geo == nil {
+		in.geo = &physics.IndoorGeo{Map: in.Map}
 	}
-	return cross
+	return in.geo
 }
 
 // DefaultCamera stands on the map's "Party Start" marker decoration, facing its yaw;

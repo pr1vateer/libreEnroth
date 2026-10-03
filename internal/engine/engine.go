@@ -50,6 +50,7 @@ type Config struct {
 	Screenshot string       // write the frame to this PNG after Frames frames, then quit
 	Frames     int          // frames to render before the screenshot
 	Mouse      *image.Point // fixed mouse position in UI pixels (screenshots)
+	Script     *ui.Script   // keys to replay; the screenshot waits for its end
 }
 
 // Game implements ebiten.Game.
@@ -159,6 +160,9 @@ func (g *Game) input() *ui.Input {
 		}
 	}
 	in.Runes = ebiten.AppendInputChars(nil)
+	if g.cfg.Script != nil {
+		g.cfg.Script.Next(in)
+	}
 	return in
 }
 
@@ -213,6 +217,16 @@ func mapKey(k ebiten.Key) (ui.Key, bool) {
 		return ui.KeyF3, true
 	case ebiten.KeyF4:
 		return ui.KeyF4, true
+	case ebiten.KeyF5:
+		return ui.KeyF5, true
+	case ebiten.KeyInsert:
+		return ui.KeyInsert, true
+	case ebiten.KeyControlLeft, ebiten.KeyControlRight:
+		return ui.KeyControl, true
+	case ebiten.KeyBracketLeft:
+		return ui.KeyBracketLeft, true
+	case ebiten.KeyBracketRight:
+		return ui.KeyBracketRight, true
 	}
 	return 0, false
 }
@@ -246,7 +260,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	g.frames++
-	if g.cfg.Screenshot != "" && !g.done && g.frames >= max(g.cfg.Frames, 1) {
+	scripted := g.cfg.Script == nil || g.cfg.Script.Done()
+	if g.cfg.Screenshot != "" && !g.done && scripted && g.frames >= max(g.cfg.Frames, 1) {
 		g.done = true
 		if err := writePNG(screen, g.cfg.Screenshot); err != nil {
 			g.err = err

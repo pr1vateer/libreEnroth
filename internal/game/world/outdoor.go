@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"libre-enroth/internal/assets/desc"
+	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/maps/delta"
 	"libre-enroth/internal/maps/odm"
 	"libre-enroth/internal/render"
@@ -22,6 +23,7 @@ type Outdoor struct {
 	tex    *TextureCache
 	tiles  desc.Tiles
 	decIdx []int // ddeclist.bin index of each decoration (0 = unknown)
+	geo    *physics.OutdoorGeo
 	vbuf   []render.Vertex
 }
 
@@ -73,8 +75,34 @@ func NewOutdoor(t *Tables, tex *TextureCache, name string, blob, ddm []byte) (*O
 	}
 	o.MapIndex = t.MapIndex(name)
 	o.SkyName = skyName(o.MapIndex)
+	o.geo = physics.NewOutdoorGeo(m, o.TileAttr, collisionDecorations(t.Decs, o.decIdx, len(m.Decorations),
+		func(i int) (uint16, [3]int32) {
+			d := &m.Decorations[i]
+			return d.Flags, [3]int32{d.Pos.X, d.Pos.Y, d.Pos.Z}
+		}))
+	o.geo.PlaneOfWater = strings.EqualFold(name, "elemw.odm")
+	if o.Delta != nil {
+		t := o.Delta.Time[0x20:]
+		o.geo.FlyCeiling = int32(uint32(t[0]) | uint32(t[1])<<8 | uint32(t[2])<<16 | uint32(t[3])<<24)
+	}
 	return o, nil
 }
+
+// TileAttr is the dtile.bin attribute of the tile in cell (gx, gy), 0 outside.
+//
+// mm8: 0x47ff84 (Odm_TileAttr)
+func (o *Outdoor) TileAttr(gx, gy int) uint16 {
+	if gx < 0 || gx >= odm.Grid || gy < 0 || gy >= odm.Grid {
+		return 0
+	}
+	if i := o.Map.TileIndex(gx, gy); i >= 0 && i < len(o.tiles) {
+		return uint16(o.tiles[i].Attr)
+	}
+	return 0
+}
+
+// Geo is the map's terrain, floor and collision geometry.
+func (o *Outdoor) Geo() *physics.OutdoorGeo { return o.geo }
 
 // skyNames is the sky texture table at 0x4fe130.
 var skyNames = [...]string{"plansky3", "sky6pm", "cloudsabove", "stormclds", "sunsetclouds",

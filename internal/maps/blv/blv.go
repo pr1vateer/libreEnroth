@@ -40,14 +40,20 @@ type Header struct {
 
 // Face is one 0x60-byte face.
 type Face struct {
-	NormalF  [3]float32 // +0x00
-	DistF    float32    // +0x0c
-	Normal   [3]int32   // +0x10: 16.16
-	Dist     int32      // +0x1c: 16.16, n.p + dist = 0 on the plane
-	ZCalc    [3]int32   // +0x20: floors z = (a*x + b*y + c + 0x8000) >> 16
-	Attr     uint32     // +0x2c: Face* bits
-	Verts    []uint16   // L.FData; the stored arrays repeat the first vertex at the end
-	XDisp    []int16
+	NormalF [3]float32 // +0x00
+	DistF   float32    // +0x0c
+	Normal  [3]int32   // +0x10: 16.16
+	Dist    int32      // +0x1c: 16.16, n.p + dist = 0 on the plane
+	// ZCalc (+0x20) gives the z of a sloped floor: (a*x + b*y + c + 0x8000) >> 16 in
+	// Indoor_GetSector 0x499f5f, (x*a >> 16) + (y*b >> 16) + (c >> 16) in Indoor_FloorZ 0x46d0d0.
+	ZCalc [3]int32
+	Attr  uint32 // +0x2c: Face* bits
+	// Verts and the displacement arrays come from L.FData. Each has numVerts entries plus,
+	// within its capacity, the stored closing entry [numVerts] that the collision code
+	// (internal/game/physics) reads. It is Verts[0] in nearly every face, but not checked:
+	// a few shipped faces store junk there.
+	Verts    []uint16
+	XDisp    []int16 // added to the vertices in point-in-polygon tests
 	YDisp    []int16
 	ZDisp    []int16
 	U, V     []int16  // texels
@@ -228,20 +234,21 @@ func Parse(b []byte) (*Map, error) {
 		// mm8: 0x498050 face pointer fix-up: six arrays of n+1 u16 each
 		arr := func() []int16 {
 			a := binread.Rec(fdata.Bytes(2 * (n + 1)))
-			out := make([]int16, n)
+			out := make([]int16, n+1)
 			for k := range out {
 				out[k] = a.I16(2 * k)
 			}
-			return out
+			return out[:n]
 		}
 		vs := arr()
-		face.Verts = make([]uint16, n)
-		for k, v := range vs {
+		face.Verts = make([]uint16, n+1)
+		for k, v := range vs[:n+1] {
 			face.Verts[k] = uint16(v)
-			if int(face.Verts[k]) >= nv {
+			if k < n && int(face.Verts[k]) >= nv {
 				return nil, fmt.Errorf("blv: face %d: vertex %d out of range (%d)", i, face.Verts[k], nv)
 			}
 		}
+		face.Verts = face.Verts[:n]
 		face.XDisp, face.YDisp, face.ZDisp = arr(), arr(), arr()
 		face.U, face.V = arr(), arr()
 	}

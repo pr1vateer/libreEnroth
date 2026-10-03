@@ -54,16 +54,27 @@ type Header struct {
 
 // Face is one 0x134-byte BModel face.
 type Face struct {
-	Normal   [3]int32 // +0x00: 16.16
-	Dist     int32    // +0x0c: 16.16 plane distance
-	Attr     uint32   // +0x1c: FaceInvisible, FaceAnimated, scroll bits, ...
-	Verts    []uint16 // +0x20 u16[20]: indices into BModel.Vertices
-	U, V     []int16  // +0x48, +0x70 i16[20]: texture coordinates in texels
-	TexDU    int16    // +0x112: texture offset
-	TexDV    int16    // +0x114
-	Event    int16    // +0x124
-	PolyType uint8    // +0x12f
-	Texture  string   // from the name list after the BSP nodes
+	Normal [3]int32 // +0x00: 16.16
+	Dist   int32    // +0x0c: 16.16 plane distance
+	// ZCalc gives the z of a sloped floor or ceiling: (x*a >> 16) + (y*b >> 16) + (c >> 16)
+	// (Outdoor_FloorZ 0x46d6bb).
+	ZCalc [3]int32 // +0x10
+	Attr  uint32   // +0x1c: FaceInvisible, FaceAnimated, scroll bits, ...
+	// Verts (+0x20 u16[20]) indexes BModel.Vertices. Verts and the displacements
+	// (+0x98, +0xc0, +0xe8 i16[20]) have numVerts entries plus, within their capacity,
+	// the entry [numVerts] that the collision code reads (internal/game/physics): the
+	// stored closing vertex (== Verts[0] in every shipped face with fewer than 20), or for
+	// a 20-vertex face whatever follows the array, as the original reads it.
+	Verts               []uint16
+	XDisp, YDisp, ZDisp []int16
+	U, V                []int16  // +0x48, +0x70 i16[20]: texture coordinates in texels
+	TexDU               int16    // +0x112: texture offset
+	TexDV               int16    // +0x114
+	BBox                [6]int16 // +0x116: x1 x2 y1 y2 z1 z2
+	Cog                 int16    // +0x122
+	Event               int16    // +0x124
+	PolyType            uint8    // +0x12f: 1 wall, 3 floor, 4 sloped floor, 5 ceiling, 6 sloped ceiling
+	Texture             string   // from the name list after the BSP nodes
 }
 
 // Face attribute bits.
@@ -84,6 +95,8 @@ type BSPNode [8]byte
 type BModel struct {
 	Name, Name2 string // +0x00, +0x20 char[32]
 	Flags       uint32 // +0x40
+	BBoxMin     Vec3   // +0x7c: bounding box (Outdoor_FloorZ 0x46d6bb, Collide_Models 0x46ead9)
+	BBoxMax     Vec3   // +0x88
 	Center      Vec3   // +0xac: bounding sphere (0x479a4c culls with it)
 	Radius      int32  // +0xb8
 	Vertices    []Vec3
@@ -227,6 +240,8 @@ func Parse(b []byte) (*Map, error) {
 func parseModel(r *binread.Reader, h binread.Rec, m *BModel) error {
 	m.Name, m.Name2 = h.Str(0, 32), h.Str(0x20, 32)
 	m.Flags = h.U32(0x40)
+	m.BBoxMin = Vec3{h.I32(0x7c), h.I32(0x80), h.I32(0x84)}
+	m.BBoxMax = Vec3{h.I32(0x88), h.I32(0x8c), h.I32(0x90)}
 	m.Center = Vec3{h.I32(0xac), h.I32(0xb0), h.I32(0xb4)}
 	m.Radius = h.I32(0xb8)
 	nv, nf, nn := int(h.I32(0x44)), int(h.I32(0x4c)), int(h.I32(0x5c))
@@ -252,18 +267,30 @@ func parseModel(r *binread.Reader, h binread.Rec, m *BModel) error {
 		if n > MaxFaceVerts {
 			return fmt.Errorf("face %d: %d vertices", i, n)
 		}
-		face.Verts = make([]uint16, n)
+		face.ZCalc = [3]int32{f.I32(0x10), f.I32(0x14), f.I32(0x18)}
+		face.Verts = make([]uint16, n+1)
+		face.XDisp, face.YDisp, face.ZDisp = make([]int16, n+1), make([]int16, n+1), make([]int16, n+1)
 		face.U = make([]int16, n)
 		face.V = make([]int16, n)
-		for k := range n {
+		for k := range n + 1 { // [n] runs into the next field when n == 20
 			face.Verts[k] = f.U16(0x20 + 2*k)
+			face.XDisp[k], face.YDisp[k], face.ZDisp[k] = f.I16(0x98+2*k), f.I16(0xc0+2*k), f.I16(0xe8+2*k)
+			if k == n {
+				break
+			}
 			face.U[k] = f.I16(0x48 + 2*k)
 			face.V[k] = f.I16(0x70 + 2*k)
 			if int(face.Verts[k]) >= nv {
 				return fmt.Errorf("face %d: vertex %d out of range (%d)", i, face.Verts[k], nv)
 			}
 		}
+		face.Verts = face.Verts[:n]
+		face.XDisp, face.YDisp, face.ZDisp = face.XDisp[:n], face.YDisp[:n], face.ZDisp[:n]
 		face.TexDU, face.TexDV = f.I16(0x112), f.I16(0x114)
+		for k := range face.BBox {
+			face.BBox[k] = f.I16(0x116 + 2*k)
+		}
+		face.Cog = f.I16(0x122)
 		face.Event = f.I16(0x124)
 		face.PolyType = f.U8(0x12f)
 	}

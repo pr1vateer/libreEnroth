@@ -30,6 +30,15 @@ const (
 	KeyF2
 	KeyF3
 	KeyF4
+	KeyF5
+	KeyInsert
+	KeyControl
+)
+
+// Punctuation keys, as Windows virtual-key codes (the original binds strafing to them).
+const (
+	KeyBracketLeft  Key = 0xdb // VK_OEM_4 '['
+	KeyBracketRight Key = 0xdd // VK_OEM_6 ']'
 )
 
 // Input is one tick of input, with the mouse already mapped to 640x480 UI pixels.

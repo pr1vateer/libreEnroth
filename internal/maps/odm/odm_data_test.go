@@ -127,3 +127,72 @@ func TestOut01(t *testing.T) {
 		}
 	}
 }
+
+// TestCollisionFields sweeps every BModel face of the 14 maps for the fields the
+// collision code reads: the closing vertex, face and model boxes around the vertices,
+// and the zCalc plane of sloped floors and ceilings (modulo 2^16, see below).
+//
+// mm8: 0x46d6bb (Outdoor_FloorZ), 0x46ead9 (Collide_Models)
+func TestCollisionFields(t *testing.T) {
+	games := openGames(t)
+	n, full, sloped := 0, 0, 0
+	for _, e := range games.Entries {
+		if !strings.HasSuffix(strings.ToLower(e.Name), ".odm") {
+			continue
+		}
+		n++
+		raw, err := games.Raw(e.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := lod.UnpackMap(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := odm.Parse(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for mi, mod := range m.Models {
+			for fi, f := range mod.Faces {
+				nv := len(f.Verts)
+				if cap(f.Verts) <= nv || cap(f.XDisp) <= nv || cap(f.YDisp) <= nv || cap(f.ZDisp) <= nv {
+					t.Fatalf("%s: model %d face %d: no closing entry", e.Name, mi, fi)
+				}
+				if nv == odm.MaxFaceVerts {
+					full++
+				} else if f.Verts[:nv+1][nv] != f.Verts[0] {
+					t.Errorf("%s: model %d face %d: closing vertex %d != %d", e.Name, mi, fi, f.Verts[:nv+1][nv], f.Verts[0])
+				}
+				for _, vi := range f.Verts {
+					v := mod.Vertices[vi]
+					in := func(c, lo, hi int32) bool { return lo <= c && c <= hi }
+					if !in(v.X, int32(f.BBox[0]), int32(f.BBox[1])) || !in(v.Y, int32(f.BBox[2]), int32(f.BBox[3])) ||
+						!in(v.Z, int32(f.BBox[4]), int32(f.BBox[5])) {
+						t.Errorf("%s: model %d face %d: vertex %v outside the face box %v", e.Name, mi, fi, v, f.BBox)
+					}
+					if !in(v.X, mod.BBoxMin.X, mod.BBoxMax.X) || !in(v.Y, mod.BBoxMin.Y, mod.BBoxMax.Y) ||
+						!in(v.Z, mod.BBoxMin.Z, mod.BBoxMax.Z) {
+						t.Errorf("%s: model %d: vertex %v outside the model box %v..%v", e.Name, mi, v, mod.BBoxMin, mod.BBoxMax)
+					}
+					if f.PolyType == 4 || f.PolyType == 6 {
+						z := int32(int64(v.X)*int64(f.ZCalc[0])>>16) + int32(int64(v.Y)*int64(f.ZCalc[1])>>16) + f.ZCalc[2]>>16
+						// zCalc[2] = -dist/nz overflows on steep faces in the shipped files, and
+						// the game reads the same wrapped value: compare modulo 2^16.
+						// Three truncating shifts lose up to 3 units.
+						if d := int16(z - v.Z); d < -4 || d > 2 {
+							t.Errorf("%s: model %d face %d: zCalc gives %d at vertex %v", e.Name, mi, fi, z, v)
+						}
+					}
+				}
+				if f.PolyType == 4 || f.PolyType == 6 {
+					sloped++
+				}
+			}
+		}
+	}
+	if n != 14 {
+		t.Errorf("parsed %d .odm, want 14", n)
+	}
+	t.Logf("%d faces with 20 vertices, %d sloped", full, sloped)
+}

@@ -2,10 +2,14 @@
 //
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
 //	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
-//	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y]
+//	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y] [-input script] [-freecam]
 //
-// In game: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn look up/down,
-// Space/C fly up/down, Shift faster, right mouse drag looks around.
+// In game, the original's default keys: Up/Down walk, Left/Right turn (Ctrl: strafe),
+// [ and ] strafe, Shift runs (U toggles always-run), X jumps, PgDn/Delete/End look
+// up/down/ahead, PgUp/Insert fly up/down and Home lands (with the fly buff).
+// Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking.
+// Free camera: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn pitch,
+// Space/C up and down, Shift faster, right mouse drag looks around.
 package main
 
 import (
@@ -36,8 +40,10 @@ func main() {
 		frames     = flag.Int("frames", 5, "frames to render before -screenshot")
 		mouseFlag  = flag.String("mouse", "", "pin the mouse at UI position x,y (for screenshots)")
 		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d05.blv); implies -state ingame")
-		camFlag    = flag.String("cam", "", "camera x,y,z,yaw,pitch (z of the feet; angles in 2048ths of a turn)")
+		camFlag    = flag.String("cam", "", "start position x,y,z,yaw,pitch (z of the feet, dropped to the floor for the party; angles in 2048ths of a turn)")
 		timeFlag   = flag.String("time", "9:00", "time of day HH:MM for the lighting")
+		inputFlag  = flag.String("input", "", "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60")
+		freeCam    = flag.Bool("freecam", false, "start with the free camera (F3) instead of the party")
 	)
 	flag.Parse()
 
@@ -76,6 +82,11 @@ func main() {
 		log.Fatalf("-time: want HH:MM")
 	}
 	cfg := engine.Config{Res: res, Filter: filter, Screenshot: *screenshot, Frames: *frames}
+	if *inputFlag != "" {
+		if cfg.Script, err = ui.ParseScript(*inputFlag); err != nil {
+			log.Fatalf("-input: %v", err)
+		}
+	}
 	if *mouseFlag != "" {
 		var p image.Point
 		if _, err := fmt.Sscanf(*mouseFlag, "%d,%d", &p.X, &p.Y); err != nil {
@@ -108,8 +119,10 @@ func main() {
 			return nil, err
 		}
 		w.Clock.Hour, w.Clock.Minute = hour, minute
+		w.FreeCamOn = *freeCam
 		if cam != nil {
 			w.Cam = *cam
+			w.SetPartyFromCam()
 			cam = nil // only the first map
 		}
 		return w, nil
