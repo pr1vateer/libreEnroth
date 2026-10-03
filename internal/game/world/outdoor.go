@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"libre-enroth/internal/assets/desc"
+	"libre-enroth/internal/maps/delta"
 	"libre-enroth/internal/maps/odm"
 	"libre-enroth/internal/render"
 )
@@ -13,6 +14,7 @@ import (
 // Outdoor is a loaded .odm with what drawing it needs.
 type Outdoor struct {
 	Map      *odm.Map
+	Delta    *delta.Delta
 	MapIndex int // MapStats.txt row
 	SkyName  string
 
@@ -23,15 +25,37 @@ type Outdoor struct {
 	vbuf   []render.Vertex
 }
 
-// NewOutdoor parses an unpacked .odm and resolves its tables.
+// NewOutdoor parses an unpacked .odm and its .ddm (nil for none), applies the delta's
+// face attributes and decoration flags, and resolves its tables.
 //
 // mm8: 0x47df28 (Odm_Load)
-func NewOutdoor(t *Tables, tex *TextureCache, name string, blob []byte) (*Outdoor, error) {
+func NewOutdoor(t *Tables, tex *TextureCache, name string, blob, ddm []byte) (*Outdoor, error) {
 	m, err := odm.Parse(blob)
 	if err != nil {
 		return nil, err
 	}
 	o := &Outdoor{Map: m, t: t, tex: tex}
+	if ddm != nil {
+		faces := 0
+		for _, mod := range m.Models {
+			faces += len(mod.Faces)
+		}
+		d, err := delta.Parse(ddm, delta.DDM, faces, len(m.Decorations), 0)
+		if err != nil {
+			return nil, err
+		}
+		o.Delta = d
+		i := 0
+		for mi := range m.Models {
+			for fi := range m.Models[mi].Faces {
+				m.Models[mi].Faces[fi].Attr = d.FaceAttrs[i]
+				i++
+			}
+		}
+		for i := range m.Decorations {
+			m.Decorations[i].Flags = d.DecFlags[i]
+		}
+	}
 	// The header's tile mode picks the tile table (0x47df28: +0x5f == 2 -> dtile3.bin,
 	// == 1 -> dtile2.bin, else dtile.bin).
 	switch m.TileMode {

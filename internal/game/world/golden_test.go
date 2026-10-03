@@ -108,9 +108,10 @@ func moduleRoot(t testing.TB) string {
 type view struct {
 	name       string
 	mapName    string
-	cam        *FreeCam // nil: the map's default camera; Z is above the ground
+	cam        *FreeCam // nil: the map's default camera; outdoors Z is above the ground
 	w, h       int
 	hour, mins int
+	doorTicks  int // indoors: toggle every door and let them move this long
 }
 
 // Frozen SHA-256s of the composed frames. Regenerate with:
@@ -120,6 +121,11 @@ var worldHashes = map[string]string{
 	"out01_town":  "56fd9472fff346e9761cbb166ef05b09aeabf7696d9224520517e555eff5805c",
 	"out01_sky":   "63416b6f78278e5fb05d0f5368286c8a0b06e4e23b874f053afd6e38e6e16833",
 	"out02_wide":  "ed3c7e861924fdb8534abe4e1fd2bff2c5c77e38575b6cefc2b5b536e1af78d5",
+	"d05_start":   "492ef9699f0b7520b4266e12b674da9b3cbb4e9dc242c253c8d3e14fc989212d",
+	"d05_door":    "3b60ddc36b18490989f216d9492bbb0f83feef449ff9768c01d260e2255f4331",
+	"d13_torch":   "3ec4f5fdd302c993bc3b41259e382500977a823f68c612629b7c2d9e63745739",
+	"d16_start":   "1ed937f988d98768f3890db3aa3c0444150828f1b6bd50f2b348a34cd1f92fcc",
+	"d28_stairs":  "310a9898b2a87104a27c86270c2a116cce6547ac9c341e2201a8a78b41df9340",
 }
 
 var views = []view{
@@ -127,6 +133,11 @@ var views = []view{
 	{name: "out01_town", mapName: "out01.odm", cam: &FreeCam{X: 3766, Y: 7649, Z: 700, Yaw: 100, Pitch: -50}, w: 640, h: 480, hour: 9},
 	{name: "out01_sky", mapName: "out01.odm", cam: &FreeCam{X: 2000, Y: 9000, Z: 100, Yaw: 1536, Pitch: 120}, w: 1280, h: 720, hour: 15},
 	{name: "out02_wide", mapName: "out02.odm", cam: &FreeCam{X: 0, Y: -4000, Z: 300, Yaw: 512, Pitch: -30}, w: 1280, h: 720, hour: 11},
+	{name: "d05_start", mapName: "d05.blv", w: 640, h: 480},
+	{name: "d05_door", mapName: "d05.blv", cam: &FreeCam{X: 8512, Y: 1800, Z: -640, Yaw: 512}, w: 640, h: 480, doorTicks: 300},
+	{name: "d13_torch", mapName: "d13.blv", cam: &FreeCam{X: -1650, Y: 3176, Z: -1545}, w: 640, h: 480},
+	{name: "d16_start", mapName: "d16.blv", w: 1280, h: 720},
+	{name: "d28_stairs", mapName: "d28.blv", cam: &FreeCam{X: 0, Y: -448, Z: 0, Pitch: 60}, w: 1280, h: 720},
 }
 
 func TestGolden(t *testing.T) {
@@ -137,7 +148,13 @@ func TestGolden(t *testing.T) {
 			w := a.World().(*World)
 			if v.cam != nil {
 				w.Cam = *v.cam
-				w.Cam.Z += w.outdoor.Map.GroundZ(w.Cam.X, w.Cam.Y)
+				if w.outdoor != nil {
+					w.Cam.Z += w.outdoor.Map.GroundZ(w.Cam.X, w.Cam.Y)
+				}
+			}
+			if v.doorTicks > 0 {
+				w.indoor.ToggleDoors()
+				w.indoor.UpdateDoors(v.doorTicks)
 			}
 			w.Clock = Clock{Hour: v.hour, Minute: v.mins}
 			img := Compose(a, v.w, v.h)
@@ -161,21 +178,24 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-// BenchmarkFrame renders the out01 start view into the viewport of a few screen sizes.
+// BenchmarkFrame renders the out01 start view and an indoor view (d16) into the
+// viewport of a few screen sizes.
 func BenchmarkFrame(b *testing.B) {
 	e := newEnv(b)
-	w, err := Load(e.d, e.tables, e.tex, "out01.odm")
-	if err != nil {
-		b.Fatal(err)
-	}
-	for _, res := range [][2]int{{640, 480}, {1024, 768}, {1280, 720}, {1920, 1080}} {
-		rect := display.Fit(res[0], res[1]).UIRectToScreen(ui.Viewport)
-		b.Run(fmt.Sprintf("%dx%d", res[0], res[1]), func(b *testing.B) {
-			f := render.NewFrame(rect.Dx(), rect.Dy())
-			w.Render(f) // warm the texture cache
-			for b.Loop() {
-				w.Render(f)
-			}
-		})
+	for _, name := range []string{"out01.odm", "d16.blv"} {
+		w, err := Load(e.d, e.tables, e.tex, name)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for _, res := range [][2]int{{640, 480}, {1024, 768}, {1280, 720}, {1920, 1080}} {
+			rect := display.Fit(res[0], res[1]).UIRectToScreen(ui.Viewport)
+			b.Run(fmt.Sprintf("%s/%dx%d", name, res[0], res[1]), func(b *testing.B) {
+				f := render.NewFrame(rect.Dx(), rect.Dy())
+				w.Render(f) // warm the texture cache
+				for b.Loop() {
+					w.Render(f)
+				}
+			})
+		}
 	}
 }

@@ -78,6 +78,7 @@ type World struct {
 	tex      *TextureCache
 	tables   *Tables
 	outdoor  *Outdoor
+	indoor   *Indoor
 	r        render.Renderer
 	cam      render.Camera
 	subTicks int
@@ -85,7 +86,7 @@ type World struct {
 
 var _ ui.World = (*World)(nil)
 
-// Load opens a map from games.lod.
+// Load opens a map from games.lod, with its .ddm/.dlv template for indoor maps.
 func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string) (*World, error) {
 	raw, err := d.Games.Raw(name)
 	if err != nil {
@@ -96,16 +97,48 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string) (*Worl
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 	w := &World{name: name, tex: tex, tables: tables, Clock: Clock{Hour: 9}}
+	// The map's state file: .ddm outdoors, .dlv indoors (games.lod has the new-game
+	// templates; saves are M10).
+	state := func(ext string) ([]byte, error) {
+		sname := name[:len(name)-4] + ext
+		if _, ok := d.Games.Find(sname); !ok {
+			return nil, nil
+		}
+		raw, err := d.Games.Raw(sname)
+		if err != nil {
+			return nil, err
+		}
+		b, err := lod.UnpackMap(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sname, err)
+		}
+		return b, nil
+	}
 	switch {
 	case strings.HasSuffix(strings.ToLower(name), ".odm"):
-		o, err := NewOutdoor(tables, tex, name, blob)
+		ddm, err := state(".ddm")
+		if err != nil {
+			return nil, err
+		}
+		o, err := NewOutdoor(tables, tex, name, blob, ddm)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		w.outdoor = o
 		w.Cam = o.DefaultCamera()
+	case strings.HasSuffix(strings.ToLower(name), ".blv"):
+		dlv, err := state(".dlv")
+		if err != nil {
+			return nil, err
+		}
+		in, err := NewIndoor(tables, tex, blob, dlv)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		w.indoor = in
+		w.Cam = in.DefaultCamera()
 	default:
-		return nil, fmt.Errorf("%s: not an outdoor map", name)
+		return nil, fmt.Errorf("%s: not a map", name)
 	}
 	return w, nil
 }
@@ -121,17 +154,30 @@ func (w *World) Party() (x, y float64, yaw int) { return w.Cam.X, w.Cam.Y, int(w
 
 // MapMarkers implements ui.World.
 func (w *World) MapMarkers(fn func(x, y float64)) {
-	if w.outdoor != nil {
+	switch {
+	case w.outdoor != nil:
 		w.outdoor.MapMarkers(fn)
+	case w.indoor != nil:
+		w.indoor.MapMarkers(fn)
 	}
 }
 
-// Update implements ui.World: one 60 Hz tick.
+// Indoor is the loaded indoor map, nil outdoors.
+func (w *World) Indoor() *Indoor { return w.indoor }
+
+// Update implements ui.World: one 60 Hz tick. F2 opens/closes every door indoors.
 func (w *World) Update(in *ui.Input) {
 	w.Cam.Update(in)
 	w.subTicks += TicksPerSecond
-	w.Clock.Ticks += w.subTicks / 60
+	ticks := w.subTicks / 60
+	w.Clock.Ticks += ticks
 	w.subTicks %= 60
+	if w.indoor != nil {
+		if in.Pressed(ui.KeyF2) {
+			w.indoor.ToggleDoors()
+		}
+		w.indoor.UpdateDoors(ticks)
+	}
 }
 
 // FocalOutdoor is the outdoor projection distance at the 640-pixel-wide view. The
@@ -140,6 +186,15 @@ func (w *World) Update(in *ui.Input) {
 //
 // mm8: 0x422584 (field of view), 0x46402e (its arguments), 0x47b04f (copy to 0x6f2f24)
 var FocalOutdoor = math.Trunc(461*0.5/math.Tan(32*0.01745329) + 0.5)
+
+// FocalIndoor is the indoor projection distance at the 640-pixel-wide view: the larger
+// viewport side times 0.8814736 (a 65 degree frustum).
+//
+// mm8: 0x435ace (Camera_SetupIndoor)
+const FocalIndoor = 640 * 0.8814736
+
+// indoorFar is the indoor far plane: there is no mist indoors.
+const indoorFar = 0x10000
 
 // Clip distances: near 8 (0x47893a and 0x4815f0 clip vertices nearer than 8) and the
 // mist distance (polygons are cut there; the sky shows beyond).
@@ -164,6 +219,14 @@ func (w *World) Render(f *render.Frame) {
 		w.cam.Prepare()
 		w.r.Begin(f, &w.cam)
 		w.outdoor.Draw(&w.r, &w.cam, w.Clock)
+		w.r.End()
+	}
+	if w.indoor != nil {
+		w.cam.Focal = FocalIndoor * s
+		w.cam.Far = indoorFar
+		w.cam.Prepare()
+		w.r.Begin(f, &w.cam)
+		w.indoor.Draw(&w.r, &w.cam, f, w.Clock)
 		w.r.End()
 	}
 }

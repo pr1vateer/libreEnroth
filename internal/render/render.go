@@ -25,6 +25,13 @@ type Vertex struct {
 	F       float64 // fog: 0 none .. 1 fog colour
 }
 
+// PointLight is a coloured light that adds to the vertex light of a lit polygon,
+// falling off linearly to 0 at Radius: (1 - d/Radius) * colour, colour 0..1.
+type PointLight struct {
+	X, Y, Z, Radius float64
+	R, G, B         float64
+}
+
 // plane is an attribute linear in frame pixel coordinates: a0 + ax*x + ay*y.
 type plane struct{ a0, ax, ay float64 }
 
@@ -37,10 +44,12 @@ type tri struct {
 	x, y               [3]float64 // sorted by y (then x)
 	ymin, ymax         int        // rows [ymin, ymax)
 	iw, uw, vw, lw, fw plane      // 1/depth and attribute/depth
+	lights             []PointLight
+	xw, yw, zw         plane // world position/depth, for lights
 }
 
 // pv is a projected vertex.
-type pv struct{ x, y, iw, u, v, l, f float64 }
+type pv struct{ x, y, iw, u, v, l, f, wx, wy, wz float64 }
 
 // sky is a textured plane above the camera, filling the frame behind everything.
 type sky struct {
@@ -63,8 +72,8 @@ type Renderer struct {
 	vbuf [2][]cv
 }
 
-// cv is a camera-space vertex during clipping.
-type cv struct{ d, l, u, tu, tv, li, fo float64 }
+// cv is a camera-space vertex during clipping; wx, wy, wz is the world position.
+type cv struct{ d, l, u, tu, tv, li, fo, wx, wy, wz float64 }
 
 // Begin starts a frame. The camera must be Prepared.
 func (r *Renderer) Begin(f *Frame, cam *Camera) {
@@ -89,13 +98,19 @@ func (r *Renderer) Sky(tex *Texture, height, scale, scrollU, scrollV, minDz, lig
 // Polygon queues a convex world-space polygon, clipped to the near and far planes.
 // Polygons are not culled; callers decide which side is visible.
 func (r *Renderer) Polygon(vs []Vertex, tex *Texture, flags Flags) {
+	r.PolygonLit(vs, tex, flags, nil)
+}
+
+// PolygonLit is Polygon with point lights added to the vertex light per pixel (exact
+// every 16 pixels, linear in between) in colour. lights must not change until End.
+func (r *Renderer) PolygonLit(vs []Vertex, tex *Texture, flags Flags, lights []PointLight) {
 	if len(vs) < 3 || tex == nil {
 		return
 	}
 	in := r.vbuf[0][:0]
 	for _, v := range vs {
 		d, l, u := r.cam.View(v.X, v.Y, v.Z)
-		in = append(in, cv{d, l, u, v.U * float64(tex.W), v.V * float64(tex.H), v.L, v.F})
+		in = append(in, cv{d, l, u, v.U * float64(tex.W), v.V * float64(tex.H), v.L, v.F, v.X, v.Y, v.Z})
 	}
 	out := clipDepth(in, r.vbuf[1][:0], r.cam.Near, false)
 	in = clipDepth(out, in[:0], r.cam.Far, true)
@@ -107,14 +122,15 @@ func (r *Renderer) Polygon(vs []Vertex, tex *Texture, flags Flags) {
 	proj := func(c cv) pv {
 		iw := 1 / c.d
 		x, y := r.cam.Project(c.d, c.l, c.u)
-		return pv{x, y, iw, float64(c.tu * iw), float64(c.tv * iw), float64(c.li * iw), float64(c.fo * iw)}
+		return pv{x, y, iw, float64(c.tu * iw), float64(c.tv * iw), float64(c.li * iw), float64(c.fo * iw),
+			float64(c.wx * iw), float64(c.wy * iw), float64(c.wz * iw)}
 	}
 	p[0] = proj(in[0])
 	p[2] = proj(in[1])
 	for i := 2; i < len(in); i++ {
 		p[1] = p[2]
 		p[2] = proj(in[i])
-		r.addTri(p, tex, flags)
+		r.addTri(p, tex, flags, lights)
 	}
 }
 
@@ -130,7 +146,8 @@ func clipDepth(poly, out []cv, z float64, far bool) []cv {
 		if ia != ib {
 			t := (z - a.d) / (b.d - a.d)
 			lerp := func(x, y float64) float64 { return x + float64(t*(y-x)) }
-			out = append(out, cv{z, lerp(a.l, b.l), lerp(a.u, b.u), lerp(a.tu, b.tu), lerp(a.tv, b.tv), lerp(a.li, b.li), lerp(a.fo, b.fo)})
+			out = append(out, cv{z, lerp(a.l, b.l), lerp(a.u, b.u), lerp(a.tu, b.tu), lerp(a.tv, b.tv), lerp(a.li, b.li), lerp(a.fo, b.fo),
+				lerp(a.wx, b.wx), lerp(a.wy, b.wy), lerp(a.wz, b.wz)})
 		}
 	}
 	return out
@@ -163,18 +180,18 @@ func (r *Renderer) Billboard(b *Billboard) {
 	iw := 1 / d
 	w, h := float64(b.Tex.W), float64(b.Tex.H)
 	corner := func(x, y, u, v float64) pv {
-		return pv{x, y, iw, float64(u * w * iw), float64(v * h * iw), float64(b.L * iw), float64(b.F * iw)}
+		return pv{x, y, iw, float64(u * w * iw), float64(v * h * iw), float64(b.L * iw), float64(b.F * iw), 0, 0, 0}
 	}
 	a := corner(x0, y0, b.U0, b.V0)
 	c := corner(x1, y1, b.U1, b.V1)
-	r.addTri([3]pv{a, corner(x1, y0, b.U1, b.V0), c}, b.Tex, b.Flags)
-	r.addTri([3]pv{a, c, corner(x0, y1, b.U0, b.V1)}, b.Tex, b.Flags)
+	r.addTri([3]pv{a, corner(x1, y0, b.U1, b.V0), c}, b.Tex, b.Flags, nil)
+	r.addTri([3]pv{a, c, corner(x0, y1, b.U0, b.V1)}, b.Tex, b.Flags, nil)
 }
 
 // snap rounds to 1/16 pixel, so shared edges are walked identically.
 func snap(v float64) float64 { return math.Round(float64(v*16)) / 16 }
 
-func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags) {
+func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags, lights []PointLight) {
 	for i := range p {
 		p[i].x, p[i].y = snap(p[i].x), snap(p[i].y)
 	}
@@ -210,7 +227,7 @@ func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags) {
 		ay := (float64(d2*dx1) - float64(d1*dx2)) / det
 		return plane{a0 - float64(ax*p[0].x) - float64(ay*p[0].y), ax, ay}
 	}
-	r.tris = append(r.tris, tri{
+	t := tri{
 		tex: tex, flags: flags,
 		x: [3]float64{p[0].x, p[1].x, p[2].x}, y: [3]float64{p[0].y, p[1].y, p[2].y},
 		ymin: ymin, ymax: ymax,
@@ -219,7 +236,14 @@ func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags) {
 		vw: mk(p[0].v, p[1].v, p[2].v),
 		lw: mk(p[0].l, p[1].l, p[2].l),
 		fw: mk(p[0].f, p[1].f, p[2].f),
-	})
+	}
+	if len(lights) > 0 {
+		t.lights = lights
+		t.xw = mk(p[0].wx, p[1].wx, p[2].wx)
+		t.yw = mk(p[0].wy, p[1].wy, p[2].wy)
+		t.zw = mk(p[0].wz, p[1].wz, p[2].wz)
+	}
+	r.tris = append(r.tris, t)
 }
 
 // End rasterises everything queued since Begin: the frame is cut into horizontal bands,
@@ -280,7 +304,11 @@ func (r *Renderer) raster(t *tri, by0, by1 int) {
 		a := max(int(math.Ceil(xl-0.5)), 0)
 		b := min(int(math.Ceil(xs-0.5)), r.f.W)
 		if a < b {
-			r.span(t, y, a, b)
+			if t.lights != nil {
+				r.spanLit(t, y, a, b)
+			} else {
+				r.span(t, y, a, b)
+			}
 		}
 	}
 }
@@ -344,6 +372,99 @@ func (r *Renderer) span(t *tri, y, xa, xb int) {
 		x += n
 		u, v, l, fg = ue, ve, le, fe
 	}
+}
+
+// spanLit is span with per-channel light: the vertex light plus the point lights,
+// evaluated at the world position of every segment end.
+func (r *Renderer) spanLit(t *tri, y, xa, xb int) {
+	f := r.f
+	tex := t.tex
+	py := float64(y) + 0.5
+	row := y * f.W
+	clampUV := t.flags&ClampUV != 0
+	alpha := t.flags&AlphaTest != 0 && tex.Alpha
+	depthTest := t.flags&NoDepthTest == 0
+	depthWrite := t.flags&NoDepthWrite == 0
+	blend := t.flags&Blend != 0
+	fogC := r.FogColor
+
+	at := func(p *plane, x, iw float64) int64 {
+		return int64(math.Floor(float64(p.at(x, py) / iw * 65536)))
+	}
+	light := func(x, iw float64) (lr, lg, lb int64) {
+		base := t.lw.at(x, py) / iw
+		wx, wy, wz := t.xw.at(x, py)/iw, t.yw.at(x, py)/iw, t.zw.at(x, py)/iw
+		cr, cg, cb := base, base, base
+		for i := range t.lights {
+			l := &t.lights[i]
+			dx, dy, dz := wx-l.X, wy-l.Y, wz-l.Z
+			d := math.Sqrt(float64(dx*dx) + float64(dy*dy) + float64(dz*dz))
+			if d >= l.Radius {
+				continue
+			}
+			k := 1 - d/l.Radius
+			cr += float64(k * l.R)
+			cg += float64(k * l.G)
+			cb += float64(k * l.B)
+		}
+		fx := func(c float64) int64 { return int64(math.Floor(float64(min(c, 1) * 65536))) }
+		return fx(cr), fx(cg), fx(cb)
+	}
+	px := float64(xa) + 0.5
+	iw0 := t.iw.at(px, py)
+	u, v := at(&t.uw, px, iw0), at(&t.vw, px, iw0)
+	fg := at(&t.fw, px, iw0)
+	lr, lg, lb := light(px, iw0)
+	for x := xa; x < xb; {
+		n := min(segment, xb-x)
+		pxe := float64(x+n) + 0.5
+		iwe := t.iw.at(pxe, py)
+		ue, ve := at(&t.uw, pxe, iwe), at(&t.vw, pxe, iwe)
+		fe := at(&t.fw, pxe, iwe)
+		lre, lge, lbe := light(pxe, iwe)
+		nn := int64(n)
+		du, dv, df := (ue-u)/nn, (ve-v)/nn, (fe-fg)/nn
+		dr, dg, db := (lre-lr)/nn, (lge-lg)/nn, (lbe-lb)/nn
+		pxs := float64(x) + 0.5
+		for k := 0; k < n; k, u, v, fg, lr, lg, lb = k+1, u+du, v+dv, fg+df, lr+dr, lg+dg, lb+db {
+			i := row + x + k
+			z := float32(t.iw.at(pxs+float64(k), py))
+			if depthTest && z < f.Z[i] {
+				continue
+			}
+			c := tex.sample(u, v, clampUV)
+			if alpha {
+				a := c >> 24
+				if a < 128 {
+					continue
+				}
+				if a < 255 {
+					c = unpremul(c, a)
+				}
+			}
+			c = shadeRGB(c, lr, lg, lb, fg, fogC)
+			if blend {
+				c = (c>>1)&0x7f7f7f7f + (f.Pix[i]>>1)&0x7f7f7f7f
+			}
+			f.Pix[i] = c | 0xff000000
+			if depthWrite {
+				f.Z[i] = z
+			}
+		}
+		x += n
+		u, v, fg, lr, lg, lb = ue, ve, fe, lre, lge, lbe
+	}
+}
+
+// shadeRGB modulates each channel by its light and blends towards the fog colour (all
+// 16.16).
+func shadeRGB(c uint32, lr, lg, lb, fg int64, fogC uint32) uint32 {
+	ch := func(v uint32, l int64) uint32 { return v * uint32(clamp64(l>>8, 0, 256)) >> 8 }
+	c = ch(c&0xff, lr) | ch(c>>8&0xff, lg)<<8 | ch(c>>16&0xff, lb)<<16 | c&0xff000000
+	if fg > 0 {
+		c = lerp2(c, fogC, uint32(clamp64(fg>>8, 0, 256)))
+	}
+	return c
 }
 
 // unpremul restores the colour of a partly covered texel.

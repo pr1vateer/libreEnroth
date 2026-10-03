@@ -261,3 +261,40 @@ func itoa(v int) string {
 	}
 	return string(b)
 }
+
+// TestPointLight lights a grey wall at distance 100 with a red light 20 units in front of
+// its centre: the centre gets base + (1 - 20/radius) red, the corners only the base.
+func TestPointLight(t *testing.T) {
+	const w, h = 64, 48
+	for _, workers := range []int{1, 5} {
+		f := NewFrame(w, h)
+		f.Clear(0)
+		r := Renderer{Workers: workers}
+		r.Begin(f, testCam(w, h))
+		lights := []PointLight{{X: 80, Y: 0, Z: 0, Radius: 40, R: 1, G: 0.5, B: 0}}
+		r.PolygonLit(wall(100, 100, 0.25), solid(RGB(200, 200, 200)), 0, lights)
+		r.End()
+		c := f.Pix[(h/2)*w+w/2]
+		// d ~ 20 at the centre pixel: red 0.25 + 0.5, green 0.25 + 0.25, blue 0.25
+		cr, cg, cb := c&0xff, c>>8&0xff, c>>16&0xff
+		if cr < 145 || cr > 152 || cg < 95 || cg > 102 || cb != 50 {
+			t.Errorf("workers %d: centre = %d,%d,%d, want ~150,100,50", workers, cr, cg, cb)
+		}
+		if c := f.Pix[2*w+2]; c != RGB(50, 50, 50) {
+			t.Errorf("workers %d: corner = %#x, want only the base light", workers, c)
+		}
+	}
+	// Unlit and lit with no lights in range give the same pixels.
+	a, b := NewFrame(w, h), NewFrame(w, h)
+	var r Renderer
+	r.Begin(a, testCam(w, h))
+	r.Polygon(wall(100, 30, 0.6), checker(8, RGB(255, 0, 0), RGB(0, 0, 255)), 0)
+	r.End()
+	r.Begin(b, testCam(w, h))
+	r.PolygonLit(wall(100, 30, 0.6), checker(8, RGB(255, 0, 0), RGB(0, 0, 255)), 0,
+		[]PointLight{{X: -1000, Radius: 10, R: 1, G: 1, B: 1}})
+	r.End()
+	if frameHash(a) != frameHash(b) {
+		t.Error("an out-of-range light changed the image")
+	}
+}

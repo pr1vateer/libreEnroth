@@ -35,7 +35,7 @@ func main() {
 		screenshot = flag.String("screenshot", "", "write a PNG of the frame after -frames frames, then quit")
 		frames     = flag.Int("frames", 5, "frames to render before -screenshot")
 		mouseFlag  = flag.String("mouse", "", "pin the mouse at UI position x,y (for screenshots)")
-		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d01.blv); implies -state ingame")
+		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d05.blv); implies -state ingame")
 		camFlag    = flag.String("cam", "", "camera x,y,z,yaw,pitch (z of the feet; angles in 2048ths of a turn)")
 		timeFlag   = flag.String("time", "9:00", "time of day HH:MM for the lighting")
 	)
