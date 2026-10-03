@@ -23,6 +23,13 @@ const (
 	KeyHome
 	KeyEnd
 	KeyDelete
+	KeyPageUp
+	KeyPageDown
+	KeyShift
+	KeyF1
+	KeyF2
+	KeyF3
+	KeyF4
 )
 
 // Input is one tick of input, with the mouse already mapped to 640x480 UI pixels.
@@ -32,11 +39,15 @@ type Input struct {
 	LeftPressed, LeftReleased   bool // edges this tick
 	RightPressed, RightReleased bool
 	Keys                        []Key  // pressed this tick (including key repeat)
+	Held                        []Key  // down during this tick
 	Runes                       []rune // text typed this tick
 }
 
 // Pressed reports whether k was pressed this tick.
 func (in *Input) Pressed(k Key) bool { return slices.Contains(in.Keys, k) }
+
+// Down reports whether k is held.
+func (in *Input) Down(k Key) bool { return slices.Contains(in.Held, k) }
 
 // Clicked reports a left or right press this tick.
 func (in *Input) Clicked() bool { return in.LeftPressed || in.RightPressed }

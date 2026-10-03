@@ -5,6 +5,7 @@ import (
 	"image"
 
 	"libre-enroth/internal/gfx"
+	"libre-enroth/internal/render"
 )
 
 // State is a top-level game state.
@@ -54,6 +55,16 @@ func goTo(s State) Transition { return Transition{to: s, set: true} }
 
 var quitGame = Transition{quit: true}
 
+// World is the 3D map behind the in-game screen; internal/game/world implements it.
+type World interface {
+	Update(in *Input)       // one 60 Hz tick: camera movement, animation clock
+	Render(f *render.Frame) // draw the view into f (the viewport at render resolution)
+	MapName() string        // games.lod entry, e.g. "out01.odm"
+	Outdoor() bool
+	Party() (x, y float64, yaw int)   // for the minimap and the compass
+	MapMarkers(fn func(x, y float64)) // decorations shown on the minimap
+}
+
 // App runs the state machine: title -> credits / party creation -> in-game.
 type App struct {
 	r          *Resources
@@ -88,7 +99,7 @@ func (a *App) enter(s State) error {
 	case StateCreate:
 		sc, err = newPartyCreate(a.r)
 	case StateInGame:
-		sc, err = newInGame(a.r)
+		sc, err = newInGame(a.r, a.r.StartMap)
 	default:
 		err = fmt.Errorf("ui: no screen for %v", s)
 	}
@@ -128,6 +139,14 @@ func (a *App) Draw(c *gfx.Canvas) {
 	if a.ShowCursor {
 		c.BlitKeyed(a.cursor, a.mx, a.my)
 	}
+}
+
+// World is the map the in-game screen shows, or nil.
+func (a *App) World() World {
+	if g, ok := a.screen.(*inGame); ok {
+		return g.world
+	}
+	return nil
 }
 
 // Viewport is the 3D view rectangle in UI pixels for the current screen (empty when the

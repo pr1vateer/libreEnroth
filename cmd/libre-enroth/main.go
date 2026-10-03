@@ -1,7 +1,11 @@
 // Command libre-enroth runs the game on the original Might and Magic VIII data.
 //
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
-//	             [-state title|credits|create|ingame] [-screenshot out.png -frames N] [-mouse x,y]
+//	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
+//	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y]
+//
+// In game: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn look up/down,
+// Space/C fly up/down, Shift faster, right mouse drag looks around.
 package main
 
 import (
@@ -15,6 +19,7 @@ import (
 	"libre-enroth/internal/display"
 	"libre-enroth/internal/engine"
 	"libre-enroth/internal/game/ui"
+	"libre-enroth/internal/game/world"
 )
 
 func main() {
@@ -30,6 +35,9 @@ func main() {
 		screenshot = flag.String("screenshot", "", "write a PNG of the frame after -frames frames, then quit")
 		frames     = flag.Int("frames", 5, "frames to render before -screenshot")
 		mouseFlag  = flag.String("mouse", "", "pin the mouse at UI position x,y (for screenshots)")
+		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d01.blv); implies -state ingame")
+		camFlag    = flag.String("cam", "", "camera x,y,z,yaw,pitch (z of the feet; angles in 2048ths of a turn)")
+		timeFlag   = flag.String("time", "9:00", "time of day HH:MM for the lighting")
 	)
 	flag.Parse()
 
@@ -53,6 +61,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *mapFlag != "" {
+		start = ui.StateInGame
+	}
+	var cam *world.FreeCam
+	if *camFlag != "" {
+		cam = &world.FreeCam{}
+		if _, err := fmt.Sscanf(*camFlag, "%g,%g,%g,%g,%g", &cam.X, &cam.Y, &cam.Z, &cam.Yaw, &cam.Pitch); err != nil {
+			log.Fatalf("-cam: want x,y,z,yaw,pitch")
+		}
+	}
+	var hour, minute int
+	if _, err := fmt.Sscanf(*timeFlag, "%d:%d", &hour, &minute); err != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		log.Fatalf("-time: want HH:MM")
+	}
 	cfg := engine.Config{Res: res, Filter: filter, Screenshot: *screenshot, Frames: *frames}
 	if *mouseFlag != "" {
 		var p image.Point
@@ -71,7 +93,28 @@ func main() {
 		log.Fatalf("%v (set -data or MM8_DATA to the game directory)", err)
 	}
 	defer data.Close()
-	app, err := ui.NewApp(ui.NewResources(data), start)
+	tables, err := world.LoadTables(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tex := world.NewTextureCache(data)
+	resources := ui.NewResources(data)
+	if *mapFlag != "" {
+		resources.StartMap = *mapFlag
+	}
+	resources.LoadWorld = func(name string) (ui.World, error) {
+		w, err := world.Load(data, tables, tex, name)
+		if err != nil {
+			return nil, err
+		}
+		w.Clock.Hour, w.Clock.Minute = hour, minute
+		if cam != nil {
+			w.Cam = *cam
+			cam = nil // only the first map
+		}
+		return w, nil
+	}
+	app, err := ui.NewApp(resources, start)
 	if err != nil {
 		log.Fatal(err)
 	}

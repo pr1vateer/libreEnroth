@@ -1,0 +1,181 @@
+package world
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"flag"
+	"fmt"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"libre-enroth/internal/assets"
+	"libre-enroth/internal/assets/assettest"
+	"libre-enroth/internal/display"
+	"libre-enroth/internal/game/ui"
+	"libre-enroth/internal/gfx"
+	"libre-enroth/internal/render"
+)
+
+var update = flag.Bool("update", false, "write the composed frames to <module>/out/world_*.png and log their hashes")
+
+type env struct {
+	d      *assets.Data
+	tables *Tables
+	tex    *TextureCache
+}
+
+func newEnv(t testing.TB) *env {
+	t.Helper()
+	d, err := assets.OpenAll(assettest.Dir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	tables, err := LoadTables(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &env{d: d, tables: tables, tex: NewTextureCache(d)}
+}
+
+func (e *env) app(t testing.TB, mapName string) *ui.App {
+	t.Helper()
+	r := ui.NewResources(e.d)
+	r.StartMap = mapName
+	r.LoadWorld = func(name string) (ui.World, error) { return Load(e.d, e.tables, e.tex, name) }
+	a, err := ui.NewApp(r, ui.StateInGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.ShowCursor = false
+	return a
+}
+
+// Compose renders the world into the viewport at w x h and lays the UI canvas over it
+// (nearest-neighbour scaled), the software equivalent of engine.Game.Draw.
+func Compose(a *ui.App, w, h int) *image.RGBA {
+	tr := display.Fit(w, h)
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	for i := 3; i < len(out.Pix); i += 4 {
+		out.Pix[i] = 0xff
+	}
+	if wd := a.World(); wd != nil {
+		rect := tr.UIRectToScreen(ui.Viewport)
+		f := render.NewFrame(rect.Dx(), rect.Dy())
+		wd.Render(f)
+		src := f.Bytes()
+		for y := 0; y < f.H; y++ {
+			copy(out.Pix[out.PixOffset(rect.Min.X, rect.Min.Y+y):], src[4*y*f.W:4*(y+1)*f.W])
+		}
+	}
+	c := gfx.NewCanvas()
+	a.Draw(c)
+	ui := tr.UIRect()
+	for y := ui.Min.Y; y < ui.Max.Y; y++ {
+		for x := ui.Min.X; x < ui.Max.X; x++ {
+			ux, uy := tr.ToUI(float64(x)+0.5, float64(y)+0.5)
+			if ux < 0 || uy < 0 || ux >= gfx.ScreenW || uy >= gfx.ScreenH {
+				continue
+			}
+			s := c.Img.PixOffset(ux, uy)
+			if c.Img.Pix[s+3] == 0 {
+				continue
+			}
+			copy(out.Pix[out.PixOffset(x, y):][:4], c.Img.Pix[s:s+4])
+		}
+	}
+	return out
+}
+
+func hashImage(img *image.RGBA) string {
+	s := sha256.Sum256(img.Pix)
+	return hex.EncodeToString(s[:])
+}
+
+func moduleRoot(t testing.TB) string {
+	dir, _ := os.Getwd()
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+}
+
+type view struct {
+	name       string
+	mapName    string
+	cam        *FreeCam // nil: the map's default camera; Z is above the ground
+	w, h       int
+	hour, mins int
+}
+
+// Frozen SHA-256s of the composed frames. Regenerate with:
+// MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
+var worldHashes = map[string]string{
+	"out01_spawn": "680f83e169088d40630060e21c575d25474cba37965c4c426f67ef21966eb83e",
+	"out01_town":  "56fd9472fff346e9761cbb166ef05b09aeabf7696d9224520517e555eff5805c",
+	"out01_sky":   "63416b6f78278e5fb05d0f5368286c8a0b06e4e23b874f053afd6e38e6e16833",
+	"out02_wide":  "ed3c7e861924fdb8534abe4e1fd2bff2c5c77e38575b6cefc2b5b536e1af78d5",
+}
+
+var views = []view{
+	{name: "out01_spawn", mapName: "out01.odm", w: 640, h: 480, hour: 9},
+	{name: "out01_town", mapName: "out01.odm", cam: &FreeCam{X: 3766, Y: 7649, Z: 700, Yaw: 100, Pitch: -50}, w: 640, h: 480, hour: 9},
+	{name: "out01_sky", mapName: "out01.odm", cam: &FreeCam{X: 2000, Y: 9000, Z: 100, Yaw: 1536, Pitch: 120}, w: 1280, h: 720, hour: 15},
+	{name: "out02_wide", mapName: "out02.odm", cam: &FreeCam{X: 0, Y: -4000, Z: 300, Yaw: 512, Pitch: -30}, w: 1280, h: 720, hour: 11},
+}
+
+func TestGolden(t *testing.T) {
+	e := newEnv(t)
+	for _, v := range views {
+		t.Run(v.name, func(t *testing.T) {
+			a := e.app(t, v.mapName)
+			w := a.World().(*World)
+			if v.cam != nil {
+				w.Cam = *v.cam
+				w.Cam.Z += w.outdoor.Map.GroundZ(w.Cam.X, w.Cam.Y)
+			}
+			w.Clock = Clock{Hour: v.hour, Minute: v.mins}
+			img := Compose(a, v.w, v.h)
+			got := hashImage(img)
+			if *update {
+				dir := filepath.Join(moduleRoot(t), "out")
+				os.MkdirAll(dir, 0o755)
+				f, err := os.Create(filepath.Join(dir, "world_"+v.name+".png"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				png.Encode(f, img)
+				f.Close()
+				t.Logf("%q: %q,", v.name, got)
+				return
+			}
+			if want, ok := worldHashes[v.name]; !ok || want != got {
+				t.Errorf("%s: hash %s, want %s", v.name, got, want)
+			}
+		})
+	}
+}
+
+// BenchmarkFrame renders the out01 start view into the viewport of a few screen sizes.
+func BenchmarkFrame(b *testing.B) {
+	e := newEnv(b)
+	w, err := Load(e.d, e.tables, e.tex, "out01.odm")
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, res := range [][2]int{{640, 480}, {1024, 768}, {1280, 720}, {1920, 1080}} {
+		rect := display.Fit(res[0], res[1]).UIRectToScreen(ui.Viewport)
+		b.Run(fmt.Sprintf("%dx%d", res[0], res[1]), func(b *testing.B) {
+			f := render.NewFrame(rect.Dx(), rect.Dy())
+			w.Render(f) // warm the texture cache
+			for b.Loop() {
+				w.Render(f)
+			}
+		})
+	}
+}

@@ -12,13 +12,14 @@ func TestMapKey(t *testing.T) {
 	for k, want := range map[ebiten.Key]ui.Key{
 		ebiten.KeyA: 'A', ebiten.KeyQ: 'Q', ebiten.KeyDigit5: '5',
 		ebiten.KeyEscape: ui.KeyEscape, ebiten.KeyNumpadEnter: ui.KeyEnter, ebiten.KeyBackspace: ui.KeyBackspace,
+		ebiten.KeyPageUp: ui.KeyPageUp, ebiten.KeyShiftRight: ui.KeyShift, ebiten.KeyF2: ui.KeyF2,
 	} {
 		if got, ok := mapKey(k); !ok || got != want {
 			t.Errorf("mapKey(%v) = %v, %v; want %v", k, got, ok, want)
 		}
 	}
-	if _, ok := mapKey(ebiten.KeyF1); ok {
-		t.Error("F1 mapped")
+	if _, ok := mapKey(ebiten.KeyF12); ok {
+		t.Error("F12 mapped")
 	}
 }
 

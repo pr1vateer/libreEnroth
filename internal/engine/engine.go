@@ -18,6 +18,7 @@ import (
 	"libre-enroth/internal/display"
 	"libre-enroth/internal/game/ui"
 	"libre-enroth/internal/gfx"
+	"libre-enroth/internal/render"
 )
 
 // Filter selects how the UI canvas is scaled.
@@ -59,6 +60,8 @@ type Game struct {
 	uiImg  *ebiten.Image
 	sharp  *ebiten.Shader
 	tr     display.Transform
+	frame  *render.Frame // the 3D view at render resolution
+	view   *ebiten.Image
 	frames int
 	done   bool
 	err    error
@@ -150,6 +153,11 @@ func (g *Game) input() *ui.Input {
 			in.Keys = append(in.Keys, uk)
 		}
 	}
+	for _, k := range inpututil.AppendPressedKeys(nil) {
+		if uk, ok := mapKey(k); ok {
+			in.Held = append(in.Held, uk)
+		}
+	}
 	in.Runes = ebiten.AppendInputChars(nil)
 	return in
 }
@@ -191,15 +199,31 @@ func mapKey(k ebiten.Key) (ui.Key, bool) {
 		return ui.KeyEnd, true
 	case ebiten.KeyDelete:
 		return ui.KeyDelete, true
+	case ebiten.KeyPageUp:
+		return ui.KeyPageUp, true
+	case ebiten.KeyPageDown:
+		return ui.KeyPageDown, true
+	case ebiten.KeyShiftLeft, ebiten.KeyShiftRight:
+		return ui.KeyShift, true
+	case ebiten.KeyF1:
+		return ui.KeyF1, true
+	case ebiten.KeyF2:
+		return ui.KeyF2, true
+	case ebiten.KeyF3:
+		return ui.KeyF3, true
+	case ebiten.KeyF4:
+		return ui.KeyF4, true
 	}
 	return 0, false
 }
 
-// Draw composes the UI and scales it onto the screen.
+// Draw renders the 3D view natively into the viewport rectangle, then lays the UI over
+// it, scaled.
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.app.Draw(g.canvas)
 	g.uiImg.WritePixels(g.canvas.Img.Pix)
 	screen.Fill(image.Black)
+	g.drawWorld(screen)
 
 	filter := g.cfg.Filter
 	if g.tr.IntegerScale() && filter == FilterSharp {
@@ -228,6 +252,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			g.err = err
 		}
 	}
+}
+
+func (g *Game) drawWorld(screen *ebiten.Image) {
+	w := g.app.World()
+	if w == nil {
+		return
+	}
+	rect := g.tr.UIRectToScreen(g.app.Viewport())
+	if rect.Empty() {
+		return
+	}
+	if g.frame == nil {
+		g.frame = render.NewFrame(rect.Dx(), rect.Dy())
+	}
+	g.frame.Resize(rect.Dx(), rect.Dy())
+	w.Render(g.frame)
+	if g.view == nil || g.view.Bounds().Dx() != rect.Dx() || g.view.Bounds().Dy() != rect.Dy() {
+		if g.view != nil {
+			g.view.Deallocate()
+		}
+		g.view = ebiten.NewImage(rect.Dx(), rect.Dy())
+	}
+	g.view.WritePixels(g.frame.Bytes())
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(rect.Min.X), float64(rect.Min.Y))
+	screen.DrawImage(g.view, op)
 }
 
 func writePNG(screen *ebiten.Image, path string) error {

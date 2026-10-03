@@ -16,17 +16,26 @@ var Viewport = image.Rect(0, 29, 640, 367)
 // In-game messages (GuiGame_Build 0x4c9885).
 const msgGameMenu = 0x6b
 
+// Minimap zoom buttons (msgs of the map+/map- buttons in GuiGame_Build).
+const (
+	msgZoomIn  = 0x16f
+	msgZoomOut = 0x170
+)
+
 type inGame struct {
 	ct                          Container
 	topbar, basebar             *gfx.Sprite
 	compass, compcovr, mapframe *gfx.Sprite
 	Yaw                         int // party yaw, 0..2047 (M4)
+	world                       World
+	minimap                     *minimap
 }
 
-// newInGame builds the HUD frame around an empty (transparent) viewport.
+// newInGame builds the HUD frame around the viewport and loads mapName into it when
+// the resources can load worlds (else the viewport stays transparent).
 //
 // mm8: 0x4c9885 (GuiGame_Build)
-func newInGame(r *Resources) (*inGame, error) {
+func newInGame(r *Resources, mapName string) (*inGame, error) {
 	l := &loader{r: r}
 	g := &inGame{
 		topbar:   l.icon("topbar", false),
@@ -50,10 +59,19 @@ func newInGame(r *Resources) (*inGame, error) {
 		btn.Hotkey = b.hotkey
 		g.ct.Add(btn)
 	}
-	zoomIn := NewButton(624, 373, Msg{ID: 0x16f}, l.icon("map+up", false), nil, l.icon("map+ht", false))
-	zoomOut := NewButton(624, 460, Msg{ID: 0x170}, l.icon("map-up", false), nil, l.icon("map-ht", false))
+	zoomIn := NewButton(624, 373, Msg{ID: msgZoomIn}, l.icon("map+up", false), nil, l.icon("map+ht", false))
+	zoomOut := NewButton(624, 460, Msg{ID: msgZoomOut}, l.icon("map-up", false), nil, l.icon("map-ht", false))
 	g.ct.Add(zoomIn)
 	g.ct.Add(zoomOut)
+	if l.err == nil && r.LoadWorld != nil && mapName != "" {
+		w, err := r.LoadWorld(mapName)
+		if err != nil {
+			return nil, err
+		}
+		g.world = w
+		g.minimap = newMinimap(l, mapName)
+		_, _, g.Yaw = w.Party()
+	}
 	return g, l.err
 }
 
@@ -63,11 +81,24 @@ func (g *inGame) Viewport() image.Rectangle { return Viewport }
 func (g *inGame) Update(in *Input) Transition {
 	g.ct.Update(in)
 	for _, m := range g.ct.Queue.Drain() {
-		if m.ID == msgGameMenu {
+		switch m.ID {
+		case msgGameMenu:
 			// The original opens the game menu (Esc); until M10/M12 it leads back
 			// to the title.
 			return goTo(StateTitle)
+		case msgZoomIn:
+			if g.minimap != nil {
+				g.minimap.zoom = min(g.minimap.zoom*2, minimapZoomMax)
+			}
+		case msgZoomOut:
+			if g.minimap != nil {
+				g.minimap.zoom = max(g.minimap.zoom/2, minimapZoomMin)
+			}
 		}
+	}
+	if g.world != nil {
+		g.world.Update(in)
+		_, _, g.Yaw = g.world.Party()
 	}
 	return Transition{}
 }
@@ -78,7 +109,9 @@ func (g *inGame) Update(in *Input) Transition {
 func (g *inGame) Draw(c *gfx.Canvas) {
 	c.Blit(g.topbar, 0, 0)
 	c.Blit(g.basebar, 0, 367)
-	// Minimap (FUN_0043f7f4 into 498,373-635,478) arrives with the maps (M3).
+	if g.minimap != nil && g.world.Outdoor() {
+		g.minimap.draw(c, g.world)
+	}
 	c.SetClip(image.Rect(307, 0, 333, 20))
 	c.Blit(g.compass, int(math.Round(float64(g.Yaw)*0.1171875))+51, 10)
 	c.ResetClip()

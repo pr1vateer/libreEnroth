@@ -1,8 +1,13 @@
 // Package hwl reads the Direct3D texture caches d3dbitmap.hwl and d3dsprite.hwl:
 // "D3DT", u32 directory offset; directory = u32 count, count x name[20] (sorted),
-// count x u32 entry offsets. Each entry: u32 packed size, 8 x u32 (origW, origH, 2
-// unknown, width, height, 2 unknown), then width*height ARGB1555 pixels (zlib when
+// count x u32 entry offsets. Each entry: u32 packed size, 8 x u32 (origW, origH, cropW,
+// cropH, width, height, cropX, cropY), then width*height ARGB1555 pixels (zlib when
 // packed != 0).
+//
+// The pixels are resampled to power-of-two sizes: a bitmap is its origW x origH
+// original at half size, a sprite is only its opaque crop rectangle (cropX, cropY,
+// cropW, cropH inside the origW x origH frame). The crop words are meaningful only in
+// d3dsprite.hwl; see re/notes/render.md#billboards.
 package hwl
 
 import (
@@ -36,9 +41,9 @@ type File struct {
 // Header is the per-entry header.
 type Header struct {
 	Packed       uint32
-	OrigW, OrigH int
-	W, H         int
-	Unk          [4]uint32 // words 2, 3, 6, 7
+	OrigW, OrigH int             // size of the original image
+	W, H         int             // size of the stored pixels
+	Crop         image.Rectangle // sprites: the opaque part of the OrigW x OrigH frame
 }
 
 // Texture is a decoded hardware texture.
@@ -46,7 +51,8 @@ type Texture struct {
 	Name         string
 	OrigW, OrigH int
 	W, H         int
-	Pix          []uint16 // ARGB1555, row-major
+	Crop         image.Rectangle // see Header.Crop
+	Pix          []uint16        // ARGB1555, row-major
 }
 
 // Open opens an .hwl file.
@@ -131,7 +137,7 @@ func (h *File) Header(name string) (Header, error) {
 		Packed: le.Uint32(b[:]),
 		OrigW:  int(int32(u(0))), OrigH: int(int32(u(1))),
 		W: int(int32(u(4))), H: int(int32(u(5))),
-		Unk: [4]uint32{u(2), u(3), u(6), u(7)},
+		Crop: image.Rect(int(int32(u(6))), int(int32(u(7))), int(int32(u(6)+u(2))), int(int32(u(7)+u(3)))),
 	}, nil
 }
 
@@ -165,7 +171,7 @@ func (h *File) Load(name string) (*Texture, error) {
 			return nil, fmt.Errorf("hwl %s: %q: %w", h.Path, name, err)
 		}
 	}
-	t := &Texture{Name: h.names[h.index[strings.ToLower(name)]], OrigW: hd.OrigW, OrigH: hd.OrigH, W: hd.W, H: hd.H, Pix: make([]uint16, hd.W*hd.H)}
+	t := &Texture{Name: h.names[h.index[strings.ToLower(name)]], OrigW: hd.OrigW, OrigH: hd.OrigH, W: hd.W, H: hd.H, Crop: hd.Crop, Pix: make([]uint16, hd.W*hd.H)}
 	for i := range t.Pix {
 		t.Pix[i] = binary.LittleEndian.Uint16(data[2*i:])
 	}

@@ -18,11 +18,18 @@ type Resources struct {
 	Exe    *exe.Image
 	fonts  map[string]*text.Font
 	global []string
+
+	// LoadWorld loads a map for the in-game screen; nil leaves the viewport empty.
+	LoadWorld func(name string) (World, error)
+	// StartMap is the map a new game begins on.
+	//
+	// mm8: 0x45f682 (Game_NewGame: "out01.odm")
+	StartMap string
 }
 
 // NewResources wraps opened game data.
 func NewResources(d *assets.Data) *Resources {
-	return &Resources{Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}}
+	return &Resources{Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}, StartMap: "out01.odm"}
 }
 
 // Font loads a .fnt bound to FONTPAL.
