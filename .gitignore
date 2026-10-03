@@ -1,0 +1,5 @@
+# lodtool / test outputs (game assets are never committed)
+out/
+*.png
+!testdata/**/*.png
+setup_vars.sh
