@@ -142,6 +142,7 @@ type Light struct {
 	Type       uint8 // +0x0b: set to 5 on load
 	Flags      uint16
 	Brightness int16
+	ID         int32 // +0x10: what ToggleIndoorLight (evt 0x20) addresses
 }
 
 // LightOff marks a disabled light (Indoor_GatherFaceLights 0x45b962).
@@ -156,11 +157,16 @@ type BSPNode struct {
 
 // Decoration is one 0x20-byte level decoration (same layout as outdoors).
 type Decoration struct {
-	Name  string // from the name list; the game resolves it to a ddeclist.bin index
-	Flags uint16 // +0x02: overwritten from the .dlv
-	Pos   [3]int32
-	Yaw   int32
-	Raw   [0x20]byte
+	Name     string // from the name list; the game resolves it to a ddeclist.bin index
+	Flags    uint16 // +0x02: overwritten from the .dlv
+	Pos      [3]int32
+	Yaw      int32
+	Cog      int16 // +0x14: what SetSprite (evt 0x0d) addresses
+	Event    int16 // +0x16: map event on click, Space or proximity
+	Radius   int16 // +0x18: proximity trigger radius
+	Degrees  int16 // +0x1a: start heading in degrees (Party Start markers)
+	EventVar int16 // +0x1c: interactive decorations: the map variable holding the event
+	Raw      [0x20]byte
 }
 
 // Spawn is one 0x18-byte spawn point.
@@ -336,6 +342,8 @@ func Parse(b []byte) (*Map, error) {
 		dec.Flags = d.U16(2)
 		dec.Pos = [3]int32{d.I32(4), d.I32(8), d.I32(0xc)}
 		dec.Yaw = d.I32(0x10)
+		dec.Cog, dec.Event, dec.Radius = d.I16(0x14), d.I16(0x16), d.I16(0x18)
+		dec.Degrees, dec.EventVar = d.I16(0x1a), d.I16(0x1c)
 	}
 	for i := range m.Decorations {
 		m.Decorations[i].Name = r.Record(0x20).Str(0, 0x20)
@@ -348,7 +356,7 @@ func Parse(b []byte) (*Map, error) {
 		m.Lights[i] = Light{
 			Pos: Vec3s{l.I16(0), l.I16(2), l.I16(4)}, Radius: l.I16(6),
 			R: l.U8(8), G: l.U8(9), B: l.U8(0xa), Type: l.U8(0xb),
-			Flags: l.U16(0xc), Brightness: l.I16(0xe),
+			Flags: l.U16(0xc), Brightness: l.I16(0xe), ID: l.I32(0x10),
 		}
 	}
 

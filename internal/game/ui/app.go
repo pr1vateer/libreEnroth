@@ -66,6 +66,19 @@ type World interface {
 	MapMarkers(fn func(x, y float64)) // decorations shown on the minimap
 }
 
+// Interactor is a world whose objects react to the mouse and the interact key.
+type Interactor interface {
+	Click(x, y int)        // a left click in the viewport at UI point (x, y) (msg 4)
+	Interact()             // the interact key, Space (msg 0x62)
+	Hover(x, y int) string // the status line text for the mouse at (x, y), "" for none
+}
+
+// Traveler is a world that can send the party to another map.
+type Traveler interface {
+	// Travel returns the map a MoveToMap asked for, once.
+	Travel() (string, bool)
+}
+
 // App runs the state machine: title -> credits / party creation -> in-game.
 type App struct {
 	r          *Resources

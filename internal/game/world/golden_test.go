@@ -124,6 +124,10 @@ type view struct {
 	// input, when set, drives the party from the map's start with a ui.Script through
 	// World.Update; the frame shows the party's view.
 	input string
+	// party places the party (as -cam does); click then replays a ui.Script through
+	// the whole in-game screen (clicks, Space, hover) after a first frame.
+	party *FreeCam
+	click string
 }
 
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
@@ -141,6 +145,7 @@ var worldHashes = map[string]string{
 	"d28_climb":   "ee6063478ef190262c8404fd78768657e8ba10d01a186adba3084f7dcfec8e16",
 	"out01_run":   "de72e72af65332928c9852829920338b3a397426a6cf26dc61c4775378786cdc",
 	"d05_walk":    "802ef595fee3000a7aa67eeb81cccbfb06cb1eb1acd9c40131abe3e29c24bfe1",
+	"d05_click":   "d8dfddacb655323821affa6ecaf59acdb606441d1646d4ab3feb8a919a1c0714",
 }
 
 var views = []view{
@@ -157,6 +162,9 @@ var views = []view{
 	{name: "d28_climb", mapName: "d28.blv", input: "Left:14,Up:45,Delete:1,-:2,Delete:1", w: 640, h: 480},
 	{name: "out01_run", mapName: "out01.odm", input: "Up+Shift:150,PgDn:1,-:2,PgDn:1", w: 640, h: 480, hour: 9},
 	{name: "d05_walk", mapName: "d05.blv", input: "Up:90,Right:20", w: 640, h: 480},
+	// M5: a click on d05's door (event 11) opens it; the mouse stays on it ("Door").
+	{name: "d05_click", mapName: "d05.blv", party: &FreeCam{X: 8512, Y: 2150, Z: -640, Yaw: 512},
+		click: "Click@320/200:1,Mouse@320/200:150", w: 640, h: 480},
 }
 
 func TestGolden(t *testing.T) {
@@ -165,7 +173,21 @@ func TestGolden(t *testing.T) {
 		t.Run(v.name, func(t *testing.T) {
 			a := e.app(t, v.mapName)
 			w := a.World().(*World)
-			w.FreeCamOn = v.input == "" // the M3 views
+			w.FreeCamOn = v.input == "" && v.party == nil // the M3 views
+			if v.party != nil {
+				w.Cam = *v.party
+				w.SetPartyFromCam()
+				Compose(a, v.w, v.h)
+				sc, err := ui.ParseScript(v.click)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for !sc.Done() {
+					in := &ui.Input{}
+					sc.Next(in)
+					a.Update(in)
+				}
+			}
 			if v.input != "" {
 				sc, err := ui.ParseScript(v.input)
 				if err != nil {

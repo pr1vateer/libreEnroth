@@ -370,7 +370,9 @@ func (o *Outdoor) drawModels(r *render.Renderer, cam *render.Camera, sun *Sun, c
 			if tex.Alpha {
 				flags = render.AlphaTest
 			}
+			r.SetID(modelFacePID(mi, fi))
 			r.Polygon(vs, tex.Texture, flags)
+			r.SetID(0)
 		}
 	}
 }
@@ -425,7 +427,9 @@ func (o *Outdoor) drawDecorations(r *render.Renderer, cam *render.Camera, sun *S
 		if fr.Flags&desc.FrameLuminous == 0 {
 			bb.L = sun.OutdoorLight(0, depth)
 		}
+		r.SetID(decorationPID(i))
 		r.Billboard(&bb)
+		r.SetID(0)
 	}
 }
 

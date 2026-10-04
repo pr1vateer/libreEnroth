@@ -153,12 +153,48 @@ func (g *inGame) Update(in *Input) Transition {
 		}
 	}
 	if g.world != nil && g.rest == nil {
+		if it, ok := g.world.(Interactor); ok {
+			if in.LeftPressed && image.Pt(in.X, in.Y).In(Viewport) {
+				it.Click(in.X, in.Y)
+			}
+			if in.Pressed(KeySpace) {
+				it.Interact()
+			}
+		}
 		g.world.Update(in)
 		_, _, g.Yaw = g.world.Party()
+		if err := g.travel(); err != nil {
+			return Transition{err: err}
+		}
 	}
-	g.hover()
+	g.hover(in)
 	g.portraits.update()
 	return Transition{}
+}
+
+// travel loads the map a MoveToMap event asked for into the view.
+//
+// mm8: 0x42f877 (map change: Evt_MapLeave 0x441c68, then the map load 0x46411c)
+func (g *inGame) travel() error {
+	t, ok := g.world.(Traveler)
+	if !ok || g.r.LoadWorld == nil {
+		return nil
+	}
+	name, ok := t.Travel()
+	if !ok {
+		return nil
+	}
+	w, err := g.r.LoadWorld(name)
+	if err != nil {
+		return err
+	}
+	g.world = w
+	zoom := g.minimap.zoom
+	l := &loader{r: g.r}
+	g.minimap = newMinimap(l, name)
+	g.minimap.zoom = zoom
+	_, _, g.Yaw = w.Party()
+	return l.err
 }
 
 // toggleTurnBased starts or ends turn-based mode (Enter). Only the clock part is there
@@ -192,10 +228,11 @@ func (g *inGame) openRest() error {
 }
 
 // hover sets the status line's hover text from what the mouse is over: a portrait
-// (name, class and condition), the minimap (the date and time), else nothing.
+// (name, class and condition), the minimap (the date and time), an object in the view,
+// else nothing.
 //
 // mm8: 0x420aab (Mouse_UpdateHover), 0x42f877 (msg 0x5e, msg 0x5c)
-func (g *inGame) hover() {
+func (g *inGame) hover(in *Input) {
 	st := g.r.Status
 	for i, s := range g.portraits.slots {
 		if s.hovered && i < len(g.r.Party.Players) {
@@ -207,6 +244,12 @@ func (g *inGame) hover() {
 		names := clock.LoadNames(g.r.GlobalText)
 		st.SetHover(names.Format(g.r.Party.Calendar))
 		return
+	}
+	if it, ok := g.world.(Interactor); ok && image.Pt(in.X, in.Y).In(Viewport) {
+		if s := it.Hover(in.X, in.Y); s != "" {
+			st.SetHover(s)
+			return
+		}
 	}
 	st.ClearHover()
 }

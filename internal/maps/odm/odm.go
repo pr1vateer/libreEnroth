@@ -107,17 +107,25 @@ type BModel struct {
 
 // Decoration is one 0x20-byte level decoration.
 type Decoration struct {
-	Name  string // from the name list; the game resolves it to a ddeclist.bin index
-	Flags uint16 // +0x02; overwritten from the .ddm
-	Pos   Vec3   // +0x04
-	Yaw   int32  // +0x10: 2048 units
-	Raw   [0x20]byte
+	Name     string // from the name list; the game resolves it to a ddeclist.bin index
+	Flags    uint16 // +0x02; overwritten from the .ddm
+	Pos      Vec3   // +0x04
+	Yaw      int32  // +0x10: 2048 units
+	Cog      int16  // +0x14: what SetSprite (evt 0x0d) addresses
+	Event    int16  // +0x16: map event on click, Space or proximity
+	Radius   int16  // +0x18: proximity trigger radius
+	Degrees  int16  // +0x1a: start heading in degrees (Party Start markers)
+	EventVar int16  // +0x1c: interactive decorations: the map variable holding the event
+	Raw      [0x20]byte
 }
 
 // Decoration flags (FUN_0047b61b, the minimap FUN_0043f7f4).
 const (
-	DecVisibleOnMap = 0x8
-	DecInvisible    = 0x20
+	DecTriggerParty  = 0x1 // proximity: the event runs while the party is within Radius
+	DecTriggerActor  = 0x2 // ... an actor (M8)
+	DecTriggerObject = 0x4 // ... an object (M9)
+	DecVisibleOnMap  = 0x8 // also set when Space ran its event
+	DecInvisible     = 0x20
 )
 
 // Spawn is one 0x18-byte spawn point.
@@ -197,6 +205,8 @@ func Parse(b []byte) (*Map, error) {
 		dec.Flags = d.U16(2)
 		dec.Pos = Vec3{d.I32(4), d.I32(8), d.I32(0xc)}
 		dec.Yaw = d.I32(0x10)
+		dec.Cog, dec.Event, dec.Radius = d.I16(0x14), d.I16(0x16), d.I16(0x18)
+		dec.Degrees, dec.EventVar = d.I16(0x1a), d.I16(0x1c)
 	}
 	for i := range m.Decorations {
 		m.Decorations[i].Name = r.Record(0x20).Str(0, 0x20)

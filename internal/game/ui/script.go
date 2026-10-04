@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"strconv"
 	"strings"
 )
@@ -16,6 +17,8 @@ type Script struct {
 type scriptStep struct {
 	keys  []Key
 	ticks int
+	mouse *image.Point // the mouse stays here for the step
+	click bool         // the left button goes down on the first tick, up on the last
 }
 
 // scriptKeys names the non-character keys a script may use.
@@ -30,7 +33,8 @@ var scriptKeys = map[string]Key{
 
 // ParseScript parses steps "keys:ticks" separated by commas, where keys are key names
 // joined by '+' (letters, digits, Up, Shift, PgUp, F3, '[', ...) or '-' for none:
-// "Up:120,X:1,Right+Shift:30,-:60".
+// "Up:120,X:1,Right+Shift:30,-:60". "Mouse@x/y" puts the mouse at UI point (x, y) for
+// the step and "Click@x/y" also clicks the left button there: "Click@320/200:2".
 func ParseScript(s string) (*Script, error) {
 	sc := &Script{}
 	for _, part := range strings.Split(s, ",") {
@@ -49,6 +53,21 @@ func ParseScript(s string) (*Script, error) {
 		st := scriptStep{ticks: n}
 		if names := part[:i]; names != "-" {
 			for _, name := range strings.Split(names, "+") {
+				if verb, at, found := strings.Cut(name, "@"); found {
+					var p image.Point
+					if _, err := fmt.Sscanf(at, "%d/%d", &p.X, &p.Y); err != nil {
+						return nil, fmt.Errorf("script step %q: want %s@x/y", part, verb)
+					}
+					switch strings.ToLower(verb) {
+					case "mouse":
+					case "click":
+						st.click = true
+					default:
+						return nil, fmt.Errorf("script step %q: unknown action %q", part, verb)
+					}
+					st.mouse = &p
+					continue
+				}
 				k, ok := scriptKeys[strings.ToLower(name)]
 				if !ok && len(name) == 1 {
 					c := strings.ToUpper(name)[0]
@@ -87,6 +106,14 @@ func (s *Script) Next(in *Input) {
 			in.Held = append(in.Held, st.keys...)
 			if t == 0 {
 				in.Keys = append(in.Keys, st.keys...)
+			}
+			if st.mouse != nil {
+				in.X, in.Y = st.mouse.X, st.mouse.Y
+			}
+			if st.click {
+				in.Left = true
+				in.LeftPressed = in.LeftPressed || t == 0
+				in.LeftReleased = in.LeftReleased || t == st.ticks-1
 			}
 			break
 		}

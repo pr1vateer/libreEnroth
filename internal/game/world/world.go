@@ -12,6 +12,7 @@ import (
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/assets/lod"
 	"libre-enroth/internal/assets/txt"
+	"libre-enroth/internal/evt"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/game/ui"
@@ -25,6 +26,30 @@ type Tables struct {
 	SFT      *desc.SFT
 	TFT      desc.TFT
 	MapStats *txt.Table
+	Global   *evt.Script // global.evt
+	Houses   *txt.Table  // 2DEvents.txt
+}
+
+// HouseName is the name of 2DEvents.txt entry id (column 5), "" if none.
+//
+// mm8: 0x4414e8 (Txt_Load2DEvents: row id at 0x5a5670 + id*0x34, name at +4)
+func (t *Tables) HouseName(id int) string {
+	if t.Houses == nil {
+		return ""
+	}
+	for _, row := range t.Houses.Rows {
+		if len(row) > 5 && strings.TrimSpace(row[0]) == fmt.Sprint(id) {
+			return stripQuotes(row[5])
+		}
+	}
+	return ""
+}
+
+func stripQuotes(s string) string {
+	if len(s) > 0 && s[0] == '"' {
+		return s[1:max(len(s)-1, 1)]
+	}
+	return s
 }
 
 // LoadTables reads the descriptor tables from the language LODs.
@@ -53,6 +78,9 @@ func LoadTables(d *assets.Data) (*Tables, error) {
 	parse("dsft.bin", func(b []byte) (e error) { t.SFT, e = desc.ParseSFT(b); return })
 	parse("dtft.bin", func(b []byte) (e error) { t.TFT, e = desc.ParseTFT(b); return })
 	parse("mapstats.txt", func(b []byte) error { t.MapStats = txt.Parse(b); return nil })
+	parse("2devents.txt", func(b []byte) error { t.Houses = txt.Parse(b); return nil })
+	// mm8: 0x441a6f (Evt_LoadGlobal)
+	parse("global.evt", func(b []byte) (e error) { t.Global, e = evt.Parse(b, evt.GlobalMaxBytes); return })
 	return t, err
 }
 
@@ -88,25 +116,87 @@ type World struct {
 	// what follows is M7/M8).
 	PartyDead bool
 
-	group    *party.Party
-	name     string
-	tex      *TextureCache
-	tables   *Tables
-	outdoor  *Outdoor
-	indoor   *Indoor
-	r        render.Renderer
-	cam      render.Camera
-	subTicks int
+	group  *party.Party
+	name   string
+	vm     *evt.VM
+	strs   []string // the map's .str
+	timers *evt.Timers
+	travel *Arrival      // a MoveToMap to another map, done after the frame
+	frame  *render.Frame // the last rendered view, for picking
+	// MessageText and ReplyText are the map's message and the NPC reply (M6 shows them).
+	MessageText, ReplyText string
+	tex                    *TextureCache
+	tables                 *Tables
+	outdoor                *Outdoor
+	indoor                 *Indoor
+	r                      render.Renderer
+	cam                    render.Camera
+	subTicks               int
 }
 
 var _ ui.World = (*World)(nil)
 
 // Load opens a map from games.lod, with its .ddm/.dlv template, into session s (nil:
-// a new session with a one-member party).
+// a new session with a one-member party), and runs its map-load events. A map visited
+// before in the session comes back as it was left. After a MoveToMap the party arrives
+// where it said.
 func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Session) (*World, error) {
 	if s == nil {
 		s = NewSession()
 	}
+	key := strings.ToLower(name)
+	w, ok := s.worlds[key]
+	if !ok {
+		var err error
+		if w, err = load(d, tables, tex, name, s); err != nil {
+			return nil, err
+		}
+		if s.worlds == nil {
+			s.worlds = map[string]*World{}
+		}
+		s.worlds[key] = w
+	} else {
+		w.group = party.New(w.group.X, w.group.Y, w.group.Z, w.group.Dir)
+		if w.indoor != nil {
+			w.indoor.settleDoors()
+		}
+	}
+	w.group.Hooks = eventHooks{w: w}
+	if c := s.carry; c != nil {
+		w.group.Fly, w.group.WaterWalk, w.group.FeatherFall, w.group.Levitate = c.Fly, c.WaterWalk, c.FeatherFall, c.Levitate
+		w.group.TurnDelta = c.TurnDelta
+		s.carry = nil
+	}
+	if a := s.arrival; a != nil {
+		if !w.placeAtStart(a) {
+			w.placeDefault()
+		}
+		w.dropParty()
+		s.arrival = nil
+	} else if ok {
+		w.placeDefault()
+	}
+	w.travel, w.PartyDead = nil, false
+	w.syncClock()
+	w.enter()
+	return w, nil
+}
+
+// placeDefault puts the party where the map's default camera stands.
+func (w *World) placeDefault() {
+	w.Cam = w.defaultCam()
+	w.group.Teleport(int32(w.Cam.X), int32(w.Cam.Y), int32(w.Cam.Z), int32(w.Cam.Yaw))
+	w.dropParty()
+}
+
+func (w *World) defaultCam() FreeCam {
+	if w.outdoor != nil {
+		return w.outdoor.DefaultCamera()
+	}
+	return w.indoor.DefaultCamera()
+}
+
+func load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Session) (*World, error) {
 	raw, err := d.Games.Raw(name)
 	if err != nil {
 		return nil, err
@@ -164,6 +254,9 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 	default:
 		return nil, fmt.Errorf("%s: not a map", name)
 	}
+	if err := w.loadScripts(d); err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
 	return w, nil
 }
 
@@ -209,10 +302,10 @@ func (w *World) Update(in *ui.Input) {
 	ticks := w.subTicks / 60
 	w.Clock.Ticks += ticks
 	w.subTicks %= 60
-	if m := w.S.Party; !m.TurnBased {
-		if m.UpdateTime(ticks, w.S.Ctx) {
-			w.PartyDead = true
-		}
+	m := w.S.Party
+	w.timers.Scan(m.Time, &w.S.timerScan, func(id, step int) { w.vm.Run(evt.Source{Kind: evt.SourceMap}, id, step, true) })
+	if !m.TurnBased && m.UpdateTime(ticks, w.S.Ctx) {
+		w.PartyDead = true
 	}
 	w.syncClock()
 	if in.Pressed(ui.KeyF3) {
@@ -235,6 +328,7 @@ func (w *World) Update(in *ui.Input) {
 	} else {
 		w.movePartyKeys(in)
 		w.moveParty(int32(ticks))
+		w.proximity()
 	}
 	if w.indoor != nil {
 		if in.Pressed(ui.KeyF2) {
@@ -399,6 +493,8 @@ func (w *World) Render(f *render.Frame) {
 	if !w.FreeCamOn {
 		w.cam.X, w.cam.Y, w.cam.Z, w.cam.Yaw, w.cam.Pitch = w.eye()
 	}
+	f.EnablePick()
+	w.frame = f
 	f.Clear(render.RGB(0, 0, 0))
 	if w.outdoor != nil {
 		w.cam.Focal = FocalOutdoor * s

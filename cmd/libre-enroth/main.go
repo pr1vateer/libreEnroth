@@ -3,12 +3,13 @@
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
 //	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
 //	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y] [-input script] [-freecam]
-//	             [-party face,face,...]
+//	             [-party face,face,...] [-event N]
 //
 // In game, the original's default keys: Up/Down walk, Left/Right turn (Ctrl: strafe),
 // [ and ] strafe, Shift runs (U toggles always-run), X jumps, PgDn/Delete/End look
 // up/down/ahead, PgUp/Insert fly up/down and Home lands (with the fly buff).
-// 1-5 or a click on a portrait selects a party member.
+// 1-5 or a click on a portrait selects a party member. A click in the view or Space
+// (the object in the middle of the view) runs a door's, lever's or decoration's event.
 // Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking.
 // Free camera: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn pitch,
 // Space/C up and down, Shift faster, right mouse drag looks around.
@@ -32,6 +33,10 @@ import (
 	"libre-enroth/internal/game/world"
 )
 
+const inputHelp = "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60; Mouse@x/y and " +
+	"Click@x/y move and click the mouse (UI pixels; a click picks from the last drawn frame, so wait " +
+	"first: -:30,Click@320/200:1)"
+
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("libre-enroth: ")
@@ -48,9 +53,10 @@ func main() {
 		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d05.blv); implies -state ingame")
 		camFlag    = flag.String("cam", "", "start position x,y,z,yaw,pitch (z of the feet, dropped to the floor for the party; angles in 2048ths of a turn)")
 		timeFlag   = flag.String("time", "9:00", "game time of day HH:MM on the first day")
-		inputFlag  = flag.String("input", "", "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60")
+		inputFlag  = flag.String("input", "", inputHelp)
 		freeCam    = flag.Bool("freecam", false, "start with the free camera (F3) instead of the party")
 		partyFlag  = flag.String("party", "", "debug party: 1-5 portrait faces 0-27 (as in party creation), e.g. 0,5,12; a created hero replaces the first")
+		eventFlag  = flag.Int("event", 0, "run this map event (of the map's .evt) once the first map is loaded")
 	)
 	flag.Parse()
 
@@ -157,6 +163,10 @@ func main() {
 			w.Cam = *cam
 			w.SetPartyFromCam()
 			cam = nil // only the first map
+		}
+		if *eventFlag != 0 {
+			w.RunEvent(*eventFlag, true)
+			*eventFlag = 0
 		}
 		return w, nil
 	}

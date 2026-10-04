@@ -117,20 +117,29 @@ func NewIndoor(t *Tables, tex *TextureCache, blvBlob, dlvBlob []byte) (*Indoor, 
 	}
 	in.geo = &physics.IndoorGeo{Map: m, Decorations: collisionDecorations(t.Decs, in.decIdx, len(m.Decorations),
 		func(i int) (uint16, [3]int32) { return m.Decorations[i].Flags, m.Decorations[i].Pos })}
-	if in.Delta != nil {
-		for i := range in.Delta.Doors {
-			d := &in.Delta.Doors[i]
-			if len(d.Verts) == 0 {
-				continue
-			}
-			d.Settle()
-		}
-		in.UpdateDoors(0)
-	}
+	in.settleDoors()
 	in.secRect = make([]rect, len(m.Sectors))
 	in.secSeen = make([]bool, len(m.Sectors))
 	in.drawn = make([]bool, len(m.Faces))
 	return in, nil
+}
+
+// settleDoors restarts the doors so the next update puts them in place, as Level_Load
+// does on every map load.
+//
+// mm8: 0x45f895 (Level_Load: door reset)
+func (in *Indoor) settleDoors() {
+	if in.Delta == nil {
+		return
+	}
+	for i := range in.Delta.Doors {
+		d := &in.Delta.Doors[i]
+		if len(d.Verts) == 0 {
+			continue
+		}
+		d.Settle()
+	}
+	in.UpdateDoors(0)
 }
 
 // Decoration flags (LevelDecoration +0x02 and DecorationDesc +0x4a).
@@ -578,7 +587,9 @@ func (in *Indoor) drawFace(r *render.Renderer, cam *render.Camera, fi int, torch
 	if tex.Alpha {
 		flags = render.AlphaTest
 	}
+	r.SetID(facePID(fi))
 	r.PolygonLit(verts, tex.Texture, flags, lights)
+	r.SetID(0)
 	return nil
 }
 
@@ -672,7 +683,9 @@ func (in *Indoor) drawDecorations(r *render.Renderer, cam *render.Camera, torch 
 				}
 				bb.L = min(l, 1)
 			}
+			r.SetID(decorationPID(int(di)))
 			r.Billboard(&bb)
+			r.SetID(0)
 		}
 	}
 }

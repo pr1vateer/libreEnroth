@@ -298,3 +298,47 @@ func TestPointLight(t *testing.T) {
 		t.Error("an out-of-range light changed the image")
 	}
 }
+
+// TestPick: the ID buffer holds the nearest polygon's ID wherever it wrote depth, the
+// one behind through its alpha-tested holes, and nothing where only the sky is.
+func TestPick(t *testing.T) {
+	f := NewFrame(64, 48)
+	f.EnablePick()
+	f.Clear(0)
+	var r Renderer
+	r.Begin(f, testCam(64, 48))
+	// The far wall covers the view; the near one is a 2x2 checker with transparent
+	// top-left and bottom-right quarters.
+	r.SetID(7)
+	r.Polygon(wall(200, 1000, 1), solid(RGB(0, 255, 0)), 0)
+	hole := checker(2, 0, RGB(255, 0, 0))
+	r.SetID(9)
+	r.Polygon(wall(100, 30, 1), hole, AlphaTest|ClampUV)
+	r.End()
+	// Quarters of the near wall: x 17..47, y 9..39 roughly.
+	for _, c := range []struct {
+		x, y int
+		id   uint32
+	}{
+		{2, 2, 7},   // outside the near wall
+		{38, 16, 9}, // top-right quarter: opaque
+		{24, 16, 7}, // top-left: a hole
+		{24, 32, 9}, // bottom-left: opaque
+		{38, 32, 7}, // bottom-right: a hole
+	} {
+		id, depth := f.PickAt(c.x, c.y)
+		if id != c.id {
+			t.Errorf("(%d, %d): id %d, want %d", c.x, c.y, id, c.id)
+		}
+		want := 100.0
+		if c.id == 7 {
+			want = 200
+		}
+		if math.Abs(depth-want) > want*0.01 {
+			t.Errorf("(%d, %d): depth %g, want %g", c.x, c.y, depth, want)
+		}
+	}
+	if id, d := f.PickAt(64, 0); id != 0 || d != 0 {
+		t.Errorf("outside the frame: %d %g", id, d)
+	}
+}

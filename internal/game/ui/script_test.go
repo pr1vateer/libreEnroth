@@ -30,7 +30,23 @@ func TestScript(t *testing.T) {
 	if !sc.Done() {
 		t.Error("not done")
 	}
-	for _, bad := range []string{"Up", "Up:0", "Foo:3", "Up:x"} {
+	sc, err = ParseScript("Click@320/200:2,Mouse@5/6+Space:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, w := range []Input{
+		{X: 320, Y: 200, Left: true, LeftPressed: true},
+		{X: 320, Y: 200, Left: true, LeftReleased: true},
+		{X: 5, Y: 6, Keys: []Key{KeySpace}, Held: []Key{KeySpace}},
+	} {
+		in := &Input{}
+		sc.Next(in)
+		if in.X != w.X || in.Y != w.Y || in.Left != w.Left || in.LeftPressed != w.LeftPressed ||
+			in.LeftReleased != w.LeftReleased || !slices.Equal(in.Keys, w.Keys) {
+			t.Errorf("tick %d: %+v, want %+v", i, *in, w)
+		}
+	}
+	for _, bad := range []string{"Up", "Up:0", "Foo:3", "Up:x", "Click@1:1", "Drag@1/2:1"} {
 		if _, err := ParseScript(bad); err == nil {
 			t.Errorf("%q parsed", bad)
 		}

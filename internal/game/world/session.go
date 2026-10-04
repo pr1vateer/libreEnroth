@@ -7,9 +7,10 @@ import (
 )
 
 // Status receives the timed status line texts (Status_SetTimed 0x44a847); the UI
-// implements it.
+// implements it. Timed is the message up now ("" for none).
 type Status interface {
 	Show(text string, seconds int)
+	Timed() string
 }
 
 // Session is the game state that outlives a map: the party and its clock, the random
@@ -21,11 +22,23 @@ type Session struct {
 	Status Status
 	// Global returns global.txt string i ("" when unknown).
 	Global func(i int) string
+	// Log receives the notes about what later milestones do (default log.Printf).
+	Log func(format string, args ...any)
+
+	// worlds are the maps visited this session, kept as they were left (their map
+	// variables, doors, decorations and timers' last visit); saves are M10's.
+	worlds  map[string]*World
+	arrival *Arrival     // where a MoveToMap puts the party on the next map
+	carry   *party.Party // the party leaving the last map (its buffs carry over)
+	stubbed map[[2]int]bool
+	// timerScan is the game time of the last timer scan (0x587db0, Timers.Scan).
+	timerScan clock.Time
 }
 
 type noStatus struct{}
 
 func (noStatus) Show(string, int) {}
+func (noStatus) Timed() string    { return "" }
 
 // NewSession is a session for a fresh one-member party (tests and tools).
 func NewSession() *Session {

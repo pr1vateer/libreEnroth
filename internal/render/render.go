@@ -46,6 +46,7 @@ type tri struct {
 	iw, uw, vw, lw, fw plane      // 1/depth and attribute/depth
 	lights             []PointLight
 	xw, yw, zw         plane // world position/depth, for lights
+	id                 uint32
 }
 
 // pv is a projected vertex.
@@ -70,7 +71,12 @@ type Renderer struct {
 	tris []tri
 	sky  *sky
 	vbuf [2][]cv
+	id   uint32
 }
+
+// SetID tags the primitives queued from now on: where they write depth they write id
+// into the frame's ID buffer (if it has one). Begin resets it to 0.
+func (r *Renderer) SetID(id uint32) { r.id = id }
 
 // cv is a camera-space vertex during clipping; wx, wy, wz is the world position.
 type cv struct{ d, l, u, tu, tv, li, fo, wx, wy, wz float64 }
@@ -80,6 +86,7 @@ func (r *Renderer) Begin(f *Frame, cam *Camera) {
 	r.f, r.cam = f, cam
 	r.tris = r.tris[:0]
 	r.sky = nil
+	r.id = 0
 }
 
 // Triangles is the number of triangles queued so far.
@@ -228,7 +235,7 @@ func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags, lights []PointLigh
 		return plane{a0 - float64(ax*p[0].x) - float64(ay*p[0].y), ax, ay}
 	}
 	t := tri{
-		tex: tex, flags: flags,
+		tex: tex, flags: flags, id: r.id,
 		x: [3]float64{p[0].x, p[1].x, p[2].x}, y: [3]float64{p[0].y, p[1].y, p[2].y},
 		ymin: ymin, ymax: ymax,
 		iw: mk(p[0].iw, p[1].iw, p[2].iw),
@@ -327,6 +334,7 @@ func (r *Renderer) span(t *tri, y, xa, xb int) {
 	depthWrite := t.flags&NoDepthWrite == 0
 	blend := t.flags&Blend != 0
 	fogC := r.FogColor
+	ids := f.ID
 
 	px := float64(xa) + 0.5
 	iw0 := t.iw.at(px, py)
@@ -367,6 +375,9 @@ func (r *Renderer) span(t *tri, y, xa, xb int) {
 			f.Pix[i] = c | 0xff000000
 			if depthWrite {
 				f.Z[i] = z
+				if ids != nil {
+					ids[i] = t.id
+				}
 			}
 		}
 		x += n
@@ -387,6 +398,7 @@ func (r *Renderer) spanLit(t *tri, y, xa, xb int) {
 	depthWrite := t.flags&NoDepthWrite == 0
 	blend := t.flags&Blend != 0
 	fogC := r.FogColor
+	ids := f.ID
 
 	at := func(p *plane, x, iw float64) int64 {
 		return int64(math.Floor(float64(p.at(x, py) / iw * 65536)))
@@ -449,6 +461,9 @@ func (r *Renderer) spanLit(t *tri, y, xa, xb int) {
 			f.Pix[i] = c | 0xff000000
 			if depthWrite {
 				f.Z[i] = z
+				if ids != nil {
+					ids[i] = t.id
+				}
 			}
 		}
 		x += n

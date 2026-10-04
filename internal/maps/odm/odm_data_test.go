@@ -41,6 +41,10 @@ func TestAllODM(t *testing.T) {
 			t.Fatalf("%s: %v", e.Name, err)
 		}
 		for i, mod := range m.Models {
+			// The PID of a model face is (model << 6 | face) << 3 | 6.
+			if len(mod.Faces) > 64 {
+				t.Errorf("%s: model %d has %d faces", e.Name, i, len(mod.Faces))
+			}
 			for j, f := range mod.Faces {
 				if len(f.Verts) < 3 && f.Attr&odm.FaceInvisible == 0 {
 					t.Errorf("%s: model %d face %d: %d vertices", e.Name, i, j, len(f.Verts))

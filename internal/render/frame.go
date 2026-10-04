@@ -15,11 +15,33 @@ import (
 )
 
 // Frame is a render target: RGBA pixels and a depth buffer of 1/depth (0 = infinitely
-// far, so larger is nearer).
+// far, so larger is nearer), and optionally an object-ID (pick) buffer.
 type Frame struct {
 	W, H int
 	Pix  []uint32  // R | G<<8 | B<<16 | A<<24, row-major
 	Z    []float32 // 1/depth
+	// ID holds the Renderer.SetID value of the primitive that wrote each pixel's depth
+	// (0 = none), when EnablePick asked for it.
+	ID []uint32
+}
+
+// EnablePick allocates the ID buffer.
+func (f *Frame) EnablePick() {
+	if len(f.ID) != f.W*f.H {
+		f.ID = make([]uint32, f.W*f.H)
+	}
+}
+
+// PickAt returns the ID and the depth (0 when nothing was drawn) at pixel (x, y).
+func (f *Frame) PickAt(x, y int) (id uint32, depth float64) {
+	if x < 0 || y < 0 || x >= f.W || y >= f.H || f.ID == nil {
+		return 0, 0
+	}
+	i := y*f.W + x
+	if z := f.Z[i]; z > 0 {
+		depth = 1 / float64(z)
+	}
+	return f.ID[i], depth
 }
 
 // NewFrame allocates a w x h frame.
@@ -38,6 +60,9 @@ func (f *Frame) Resize(w, h int) {
 	f.W, f.H = w, h
 	f.Pix = make([]uint32, w*h)
 	f.Z = make([]float32, w*h)
+	if f.ID != nil {
+		f.ID = make([]uint32, w*h)
+	}
 }
 
 // Clear fills the frame with c and resets the depth buffer.
@@ -46,6 +71,7 @@ func (f *Frame) Clear(c uint32) {
 		f.Pix[i] = c
 	}
 	clear(f.Z)
+	clear(f.ID)
 }
 
 // Bytes returns the pixels as RGBA bytes (a view, not a copy), for
