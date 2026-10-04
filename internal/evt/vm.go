@@ -1,6 +1,7 @@
 package evt
 
 import (
+	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 )
 
@@ -67,9 +68,34 @@ type Host interface {
 	// ones make a member speak.
 	QuestText(n int) bool
 	AutonoteText(n int) bool
+	// NPCs is the game's NPC table, which SetNPCTopic, MoveNPC, SetNPCGreeting and
+	// SetNPCGroupNews change (nil: none loaded, they do nothing).
+	NPCs() *npc.State
+	// NPCChanged tells the open dialogue that op (SetNPCTopic, MoveNPC) changed NPC id.
+	NPCChanged(op Op, id int)
+	// SpeakInHouse opens house's dialogue; the event goes on.
+	SpeakInHouse(house int)
+	// SpeakNPC opens NPC id's dialogue; with canShow false (OnMapReload) the game keeps
+	// it for when the map is up (g_evtDeferredNpc 0x5db82c).
+	SpeakNPC(id int, canShow bool)
+	// Suspend parks the event until the player answers (PressAnyKey, InputString); the
+	// UI resumes it with VM.Resume.
+	Suspend(s Suspension)
 	// Stub is an opcode of a later milestone (op.Milestone()), or a player variable the
 	// stats do not have yet (var >= 0).
 	Stub(op Op, r Record, v Var)
+}
+
+// Suspension is an event waiting for the player.
+//
+// mm8: 0x44328b (Evt_Suspend: g_evtResumeId/Step/Source 0x5db688/0x5db68c/0x5a52c8)
+type Suspension struct {
+	Src      Source
+	ID, Step int // where it goes on
+	Op       Op  // OpPressAnyKey or OpInputString
+	// Question is InputString's question (NPCText), which the game puts in the status
+	// line buffer g_statusTimed 0x5db694.
+	Question string
 }
 
 // VM runs events. Map is the current map's script (nil: none), Global global.evt.
@@ -79,6 +105,9 @@ type VM struct {
 	// OnMapLeave runs the map's OnMapLeave events; Run calls it after an event that
 	// left for another map. Nil: VM.MapLeave.
 	OnMapLeave func()
+
+	start  int    // the running event's start step (g_evtStartStep 0x5ac150)
+	answer string // InputString's answer, typed into g_statusTimed
 }
 
 // Result is how an event ended.
@@ -87,6 +116,8 @@ type Result struct {
 	Moved bool
 	// Aborted reports a Subtract that could not pay (gold or bank).
 	Aborted bool
+	// Suspended is set when the event waits for the player (it went to Host.Suspend).
+	Suspended *Suspension
 }
 
 // Selector values (ForPartyMember and the player byte of some records).
@@ -107,6 +138,7 @@ type run struct {
 	prev    int // player of the last Compare/Add/Subtract/Set selector, -1 none
 	abort   bool
 	moved   bool
+	susp    *Suspension
 }
 
 // Run runs event id from step: it scans the source's records in file order for the
@@ -133,6 +165,8 @@ func (vm *VM) Run(src Source, id, step int, canShow bool) Result {
 	}
 	m := h.Members()
 	r := &run{vm: vm, h: h, m: m, src: src, canShow: canShow, prev: -1, sel: selRandom}
+	defer func(s int) { vm.start = s }(vm.start)
+	vm.start = step
 	if m.Selected != 0 {
 		r.sel = selSelected
 	}
@@ -161,7 +195,75 @@ func (vm *VM) Run(src Source, id, step int, canShow bool) Result {
 			vm.MapLeave()
 		}
 	}
-	return Result{Moved: r.moved, Aborted: r.abort}
+	return Result{Moved: r.moved, Aborted: r.abort, Suspended: r.susp}
+}
+
+// Resume goes on with a suspended event; answer is what the player typed for an
+// InputString (compared with the map's .str answers, case-insensitively).
+//
+// mm8: 0x4433fd (Evt_Resume), 0x4433b0 (Evt_ResumeUnpause)
+func (vm *VM) Resume(s Suspension, answer string) Result {
+	vm.answer = answer
+	return vm.Run(s.Src, s.ID, s.Step, true)
+}
+
+// suspend parks the event (Evt_Suspend) at step.
+func (r *run) suspend(op Op, id, step int, question string) {
+	r.susp = &Suspension{Src: r.src, ID: id, Step: step, Op: op, Question: question}
+	r.h.Suspend(*r.susp)
+}
+
+// CanShowTopic decides whether a dialogue shows the topic of global event id, from its
+// visibility records: OnCanShowDialogItemCmp (0x2c) jumps when a member passes the
+// compare, SetCanShowDialogItem (0x2e) sets the answer, CanShowTopicIsActorKilled
+// (0x34) jumps when the actors are dead (M8: never), Exit or EndCanShowDialogItem end
+// it. 0: hidden, 1: shown, 2: the event has none of these records (shown).
+//
+// mm8: 0x4444fe (Evt_CanShowTopic; it starts at the running event's start step)
+func (vm *VM) CanShowTopic(id int) int {
+	if id == 0 {
+		return 0
+	}
+	if vm.Global == nil {
+		return 2
+	}
+	h := vm.Host
+	r := &run{vm: vm, h: h, m: h.Members(), src: Source{Kind: SourceGlobal}, prev: -1}
+	result, seen := 1, false
+	cur := vm.start
+	recs := vm.Global.Records
+scan:
+	for i := 0; i < len(recs); i++ {
+		rec := recs[i]
+		if rec.ID() != id || rec.Step() != cur {
+			continue
+		}
+		switch rec.Op() {
+		case OpExit, OpEndCanShowDialog:
+			break scan
+		case OpOnCanShowDialog:
+			seen = true
+			for p := range r.m.Players {
+				if r.compare(p, Var(rec.U16(5)), rec.U32(7)) {
+					i, cur = -1, rec.U8(0xb)-1
+					break
+				}
+			}
+		case OpSetCanShowDialog:
+			result = rec.U8(5)
+			seen = true
+		case OpCanShowTopicKill:
+			h.Stub(OpIsActorKilled, rec, -1) // actors are M8's: nobody counts as killed
+		}
+		cur++
+	}
+	if !seen {
+		return 2
+	}
+	if result != 0 {
+		return 1
+	}
+	return 0
 }
 
 // noJump and stay are exec's step results besides a jump target.
@@ -343,10 +445,59 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 			next = rec.U8(0xd)
 		}
 	case OpPressAnyKey:
-		// Suspends the event until a key (M6); the original exits here and resumes at
-		// the next step from the dialogue.
-		h.Stub(op, rec, -1)
+		// mm8: 0x4446bd (case 0x21: Evt_Suspend(id, step + 1, 0x21), exit)
+		r.suspend(op, rec.ID(), rec.Step()+1, "")
 		return next, true
+	case OpInputString:
+		// mm8: 0x4446bd (case 0x1a): the first run (start step 0) puts the question
+		// in the status buffer and waits at this very step; the resumed run compares
+		// the answer with two strings of the map's .str and jumps on a match.
+		if r.vm.start == 0 {
+			r.suspend(op, rec.ID(), rec.Step(), h.NPCText(int(rec.I32(5))))
+			return next, true
+		}
+		a := r.vm.answer
+		if strEqualASCII(a, h.Str(int(rec.I32(9)))) || strEqualASCII(a, h.Str(int(rec.I32(0xd)))) {
+			next = rec.U8(0x11)
+		}
+	case OpSpeakInHouse:
+		// mm8: 0x4446bd (case 2): the house dialogue opens, the event goes on
+		if house := rec.U32(5); house != 0 {
+			h.SpeakInHouse(int(house))
+		}
+	case OpSpeakNPC:
+		// mm8: 0x4446bd (case 0x16), 0x443b6f (Evt_SpeakNPC)
+		h.SpeakNPC(int(rec.I32(5)), r.canShow)
+	case OpSetNPCTopic:
+		// mm8: 0x4446bd (case 0x27)
+		id := int(rec.I32(5))
+		if n := h.NPCs(); n != nil {
+			n.SetTopic(id, rec.U8(9), rec.I32(0xa))
+		}
+		h.NPCChanged(op, id)
+	case OpMoveNPC:
+		// mm8: 0x4446bd (case 0x28)
+		id := int(rec.I32(5))
+		if n := h.NPCs(); n != nil {
+			n.Move(id, rec.I32(9))
+		}
+		h.NPCChanged(op, id)
+	case OpSetNPCGreeting:
+		// mm8: 0x4446bd (case 0x32)
+		if n := h.NPCs(); n != nil {
+			n.SetGreeting(int(rec.I32(5)), rec.I32(9))
+		}
+	case OpSetNPCGroupNews:
+		// mm8: 0x4446bd (case 0x2f)
+		if n := h.NPCs(); n != nil {
+			n.SetGroupNews(int(rec.I32(5)), int16(rec.U16(9)))
+		}
+	case OpIsPlayerInParty:
+		// mm8: 0x4446bd (case 0x44): jumps when roster character id can act, in the
+		// party or not
+		if p := r.m.RosterPlayer(int(rec.I32(5))); p != nil && p.CanAct() {
+			next = rec.U8(9)
+		}
 	case OpOpenChest:
 		// OpenChest (M7) ends the event when it returns 0 (a trap went off).
 		h.Stub(op, rec, -1)
@@ -357,6 +508,26 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 		// Triggers (OnTimer, OnMapReload, ...) and opcodes without a case: nothing.
 	}
 	return next, false
+}
+
+// strEqualASCII is _stricmp == 0.
+func strEqualASCII(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		x, y := a[i], b[i]
+		if 'A' <= x && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if 'A' <= y && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 // moveToMap teleports the party on this map (name "0...") or travels to another. A
@@ -408,4 +579,13 @@ func (vm *VM) MapReload() {
 			vm.Run(Source{Kind: SourceMap}, rec.ID(), rec.Step(), false)
 		}
 	}
+}
+
+// Set is Set of variable v for member p outside an event (the dialogues call Evt_Set
+// directly).
+//
+// mm8: 0x448d4b (Evt_Set)
+func (vm *VM) Set(p int, v Var, value uint32) {
+	r := &run{vm: vm, h: vm.Host, m: vm.Host.Members(), prev: -1}
+	r.set(p, v, value)
 }

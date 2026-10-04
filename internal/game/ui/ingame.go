@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"libre-enroth/internal/game/clock"
+	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
@@ -50,6 +51,10 @@ type inGame struct {
 	timeSpot                    *Hotspot
 	lucida                      *text.Font
 	rest                        *restScreen
+	dialog                      *dialogScreen
+	message                     *messageBox
+	scoreBG                     *gfx.Sprite
+	smallnum                    *text.Font
 }
 
 // newInGame builds the HUD frame around the viewport and loads mapName into it when
@@ -66,6 +71,8 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 		compass:  l.icon("IB-COMP-A", false),
 		compcovr: l.icon("compcovr", false),
 		mapframe: l.icon("mapframe", false),
+		scoreBG:  l.icon("ScoreBG", false),
+		smallnum: l.font("smallnum.fnt"),
 	}
 	for _, b := range []struct {
 		x, msg int
@@ -100,14 +107,19 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 		g.world = w
 		g.minimap = newMinimap(l, mapName)
 		_, _, g.Yaw = w.Party()
+		if l.err == nil {
+			if _, err := g.openDialogs(); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return g, l.err
 }
 
 // Viewport is where the world shows through.
-// The rest screen covers it.
+// The rest screen and a house (its clip) cover it.
 func (g *inGame) Viewport() image.Rectangle {
-	if g.rest != nil {
+	if g.rest != nil || g.dialog != nil && g.dialog.video != nil {
 		return image.Rectangle{}
 	}
 	return Viewport
@@ -122,6 +134,11 @@ func (g *inGame) Update(in *Input) Transition {
 		g.r.Status.ClearHover()
 		g.portraits.update()
 		return Transition{}
+	}
+	if busy, err := g.updateDialogs(in); busy || err != nil {
+		g.r.Status.ClearHover()
+		g.portraits.update()
+		return Transition{err: err}
 	}
 	g.ct.Update(in)
 	if in.Pressed('R') {
@@ -166,10 +183,91 @@ func (g *inGame) Update(in *Input) Transition {
 		if err := g.travel(); err != nil {
 			return Transition{err: err}
 		}
+		if _, err := g.openDialogs(); err != nil {
+			return Transition{err: err}
+		}
 	}
 	g.hover(in)
 	g.portraits.update()
 	return Transition{}
+}
+
+// updateDialogs runs the message box or the open dialogue for one tick instead of the
+// game view (the game timer is paused while they are open, as the original pauses it).
+// busy reports that one of them had the tick.
+//
+// mm8: 0x443b6f / 0x443f4b / 0x44328b (Timer_Pause when they open)
+func (g *inGame) updateDialogs(in *Input) (busy bool, err error) {
+	w, ok := g.world.(Dialogs)
+	if !ok {
+		return false, nil
+	}
+	if g.message != nil {
+		if done, answer, ok := g.message.update(in); done {
+			g.message = nil
+			w.Answer(answer, ok)
+			if err := g.afterEvent(w); err != nil {
+				return true, err
+			}
+		}
+		return true, nil
+	}
+	if g.dialog != nil {
+		if g.dialog.update(in) {
+			g.dialog = nil
+		}
+		if err := g.afterEvent(w); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	return g.openDialogs()
+}
+
+// afterEvent follows up a dialogue click or an answer: a map change closes the
+// dialogue, a new message box or dialogue opens.
+func (g *inGame) afterEvent(w Dialogs) error {
+	if t, ok := g.world.(Traveler); ok {
+		if name, ok := t.Travel(); ok {
+			w.CloseDialog()
+			g.dialog, g.message = nil, nil
+			if err := g.loadMap(name); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := g.openDialogs()
+	return err
+}
+
+// openDialogs opens the screens for what events asked for: the message box first,
+// then the dialogue (a new one replaces the old).
+func (g *inGame) openDialogs() (bool, error) {
+	w, ok := g.world.(Dialogs)
+	if !ok {
+		return false, nil
+	}
+	if d := w.Dialog(); d == nil {
+		g.dialog = nil
+	} else if g.dialog == nil || g.dialog.d != d {
+		ds, err := newDialogScreen(g.r, w, d)
+		if err != nil {
+			return false, err
+		}
+		g.dialog = ds
+	}
+	if text, input, ok := w.MessageBox(); ok && g.message == nil {
+		var d *dialog.Dialog
+		if g.dialog != nil {
+			d = g.dialog.d
+		}
+		mb, err := newMessageBox(g.r, text, input, d)
+		if err != nil {
+			return false, err
+		}
+		g.message = mb
+	}
+	return g.dialog != nil || g.message != nil, nil
 }
 
 // travel loads the map a MoveToMap event asked for into the view.
@@ -184,6 +282,11 @@ func (g *inGame) travel() error {
 	if !ok {
 		return nil
 	}
+	return g.loadMap(name)
+}
+
+// loadMap puts map name in the view.
+func (g *inGame) loadMap(name string) error {
 	w, err := g.r.LoadWorld(name)
 	if err != nil {
 		return err
@@ -258,7 +361,7 @@ func (g *inGame) hover(in *Input) {
 //
 // mm8: 0x42f877 (msg 0x5e: globalTxt[0x1ad], class name, ": ", condition name)
 func (g *inGame) memberText(p *party.Player) string {
-	class := g.r.GlobalText(classNameGlobal + ClassForFace(p.Face))
+	class := g.r.GlobalText(classNameGlobal + p.Class)
 	s := fmt.Sprintf(g.r.GlobalText(0x1ad), p.Name, class) + ": "
 	if c := int(p.MainCondition()); c < len(conditionNames) {
 		s += g.r.GlobalText(conditionNames[c])
@@ -281,10 +384,18 @@ func (g *inGame) Draw(c *gfx.Canvas) {
 	c.ResetClip()
 	c.BlitKeyed(g.compcovr, 319-g.compcovr.W/2, 4)
 	c.BlitKeyed(g.mapframe, 482, 367)
-	// The gold/food counters (0x41b3de) come later.
+	if g.rest == nil { // Hud_DrawGoldFood skips g_screenMode 5
+		drawGoldFood(c, g.scoreBG, g.smallnum, g.r.Party)
+	}
 	g.ct.Draw(c)
 	if g.rest != nil {
 		g.rest.draw(c)
+	}
+	if g.dialog != nil {
+		g.dialog.draw(c)
+	}
+	if g.message != nil {
+		g.message.draw(c)
 	}
 	g.r.Status.Draw(c, g.lucida)
 	g.portraits.draw(c) // the portrait panel is the last child

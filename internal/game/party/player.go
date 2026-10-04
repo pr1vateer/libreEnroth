@@ -64,7 +64,9 @@ var conditionExpr = [numConditions]int{
 // that libre-enroth uses so far.
 type Player struct {
 	Name       string               // +0x0a8
+	Class      int                  // +0x352: class id (tables.ClassByName)
 	Face       int                  // +0x353: portrait 0..29
+	RosterID   int                  // its g_players index in g_partyRoster: 0 the hero, -1 none
 	Voice      int                  // +0x1be4
 	Conditions [numConditions]int64 // +0x000: game time each began, 0 = not set
 	Recovery   int                  // +0x1bf2: ticks until the player can act again
@@ -211,16 +213,18 @@ type Members struct {
 	Bounty    int32          // +0x758: total bounty collected
 	// DaysWithoutRest counts 3 AM rollovers since the last rest (+0x77e).
 	DaysWithoutRest uint8
-	QBits           Bits                  // +0x77f: quest bits, 1-based, MSB first
-	ArenaWins       [4]uint8              // +0x7d0
-	Autonotes       Bits                  // +0x818
-	Counters        [10]clock.Time        // +0x4ec: event counters 0xf7..0x100
-	Stamps          [20]clock.Time        // +0x624: event timestamps 0x101..0x114
-	History         [29]clock.Time        // +0x53c: history entries 0x116..0x132
-	TurnBased       bool                  // +0x898
-	Resting         bool                  // the rest screen is open (g_screenMode 5)
-	visited         [MaxMembers]bool      // 0xbb2ff8: NextSelectable's round robin
-	InParty         func(roster int) bool // event var 0x13e (M6 roster); nil = none
+	QBits           Bits             // +0x77f: quest bits, 1-based, MSB first
+	ArenaWins       [4]uint8         // +0x7d0
+	Autonotes       Bits             // +0x818
+	Counters        [10]clock.Time   // +0x4ec: event counters 0xf7..0x100
+	Stamps          [20]clock.Time   // +0x624: event timestamps 0x101..0x114
+	History         [29]clock.Time   // +0x53c: history entries 0x116..0x132
+	TurnBased       bool             // +0x898
+	Resting         bool             // the rest screen is open (g_screenMode 5)
+	visited         [MaxMembers]bool // 0xbb2ff8: NextSelectable's round robin
+	// Roster holds the roster characters (g_players 0xb2177c) while they are not in the
+	// party; a member who leaves is copied back. Index 0 is the hero.
+	Roster []Player
 }
 
 // Quest and autonote bit array sizes (Party +0x77f..+0x7cf, +0x818..+0x897).

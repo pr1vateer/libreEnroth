@@ -128,24 +128,30 @@ type view struct {
 	// the whole in-game screen (clicks, Space, hover) after a first frame.
 	party *FreeCam
 	click string
+	// setup runs on the loaded world before click (M6: open a dialogue).
+	setup func(w *World)
 }
 
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "4912cbd4a6ceabded1b5b2b15ee652e0a92d5f3f54954386a89971a2b992aaf5",
-	"out01_town":  "95d7ba2edc669e9aa8ec224e2e75dd9232f4c7f1ebc0cf9c92665d853d5c6282",
-	"out01_sky":   "c043596c9cf3605b0d962484bc4de6578e3b602dc1bdcefc4384360326a440e3",
-	"out02_wide":  "f99cdbcae529270e6cffe997edc5f33d5f621210e6bb45810ee14207eabf017b",
-	"d05_start":   "c163444b1de455455565db13afa29443169c028e1d698bebeaf01b1c31b76f73",
-	"d05_door":    "fbd5c2cdc7df5a787c8056ad259fb4855b767b577c1f6d1c971742167d4a5d5e",
-	"d13_torch":   "aff2b5344b19b2bf651221e8633307f5cf66e8d61750aec39bfc0772961dc0f3",
-	"d16_start":   "b7da1a107401dcd402b87148fc61497f2e1ca60d8911e9bf3f1730d0a3cfe42c",
-	"d28_stairs":  "9ec44357c4e3b098a6a51ef2a3c9cd5d70dc1905b0044d0defc6611611b3d2b2",
-	"d28_climb":   "ee6063478ef190262c8404fd78768657e8ba10d01a186adba3084f7dcfec8e16",
-	"out01_run":   "de72e72af65332928c9852829920338b3a397426a6cf26dc61c4775378786cdc",
-	"d05_walk":    "802ef595fee3000a7aa67eeb81cccbfb06cb1eb1acd9c40131abe3e29c24bfe1",
-	"d05_click":   "d8dfddacb655323821affa6ecaf59acdb606441d1646d4ab3feb8a919a1c0714",
+	"out01_spawn": "f6cb8470cbec97f3566f4e69024335058a783556d6f82e31cf300999376c50f2",
+	"out01_town":  "1262268ebc8d34b399d7c1c2e3a80c29fb1a49d4e44f6f01ed4b88fac02b9503",
+	"out01_sky":   "ee006b8c268243d7e0afe87db635af83a272c5f07c878ed99987fdc810d1efed",
+	"out02_wide":  "937305642d051d6d6a4da5a6333113eae7d1a03455b2598e3a40136c0d5500fc",
+	"d05_start":   "da7a470ac610504997950a763d367ac12a9edfa4405c9f99f69f195fb839c3f0",
+	"d05_door":    "3e683ba830a09e72fa1695db26361be4d89d95e03599c8df4800d5ef4c470c30",
+	"d13_torch":   "c7f5c5ec31a2c17705858e937849a390e446c6cad46e32a90618209fbfb767f1",
+	"d16_start":   "c493927786e3353b1c05aba39734e61eade1dc7ece7900699043fbe710cf3676",
+	"d28_stairs":  "aa903b859138b163c2579fe7aa7d39420cae4134c2a4d243a3793b2dc8c92c62",
+	"d28_climb":   "0aac6431371c88cb77acf00bc942308afd433dc5525fe33aba77f79a4b388277",
+	"out01_run":   "32004ae1eecfe6d2eea5f6c08e43d817b4e8ac5dfb67572cec5ada6964646e5e",
+	"d05_walk":    "4408b53d5d46094448b3d766d4a366b84061510f68a69e07fb45317e9f3a80e5",
+	"d05_click":   "38f758ce60de1775149fbf85e2c715a1a354f563a83f65641bcf5de200f7ad08",
+	// M6
+	"npc_dialog":     "f9868ac59e5cc2bad6ff81b89c4c9965c74fe780c47bb372f7ebe7d1f89acd16",
+	"house_resident": "98f7fa0d049e83f59a08019caebb51d7f4b82c6d9334bbabba6979b41d692756",
+	"evt_message":    "8bb11a34baaa24f4d530482af5abe9c905cfc79c75ec7a1c7b9d0274befb56e2",
 }
 
 var views = []view{
@@ -165,6 +171,24 @@ var views = []view{
 	// M5: a click on d05's door (event 11) opens it; the mouse stays on it ("Door").
 	{name: "d05_click", mapName: "d05.blv", party: &FreeCam{X: 8512, Y: 2150, Z: -640, Yaw: 512},
 		click: "Click@320/200:1,Mouse@320/200:150", w: 640, h: 480},
+	// M6: S'ton's dialogue (out01 event 500's SpeakNPC 31), the mouse on his second topic.
+	{name: "npc_dialog", mapName: "out01.odm", setup: func(w *World) { w.SpeakNPC(31, true) },
+		click: "Mouse@556/224:2", w: 640, h: 480, hour: 10},
+	// M6: the House of Thistle (230): Thistle's "Ingredients" answered, the clip 40 ticks
+	// in.
+	{name: "house_resident", mapName: "out01.odm", setup: func(w *World) {
+		w.SpeakInHouse(230)
+		d := w.Dialog()
+		d.SelectResident(0)
+		d.Click(d.Buttons[1])
+	}, click: "Mouse@556/200:40", w: 640, h: 480, hour: 9},
+	// M6: Escaton's riddle (global event 164, InputString) in the message box.
+	{name: "evt_message", mapName: "pbp.odm", setup: func(w *World) {
+		w.npcs().SetTopic(26, 0, 164)
+		w.SpeakInHouse(184)
+		d := w.Dialog()
+		d.Click(d.Buttons[0])
+	}, click: "-:31", w: 640, h: 480, hour: 9},
 }
 
 func TestGolden(t *testing.T) {
@@ -173,10 +197,20 @@ func TestGolden(t *testing.T) {
 		t.Run(v.name, func(t *testing.T) {
 			a := e.app(t, v.mapName)
 			w := a.World().(*World)
+			// d05's OnMapReload has Simon Templar speak (a deferred SpeakNPC): Esc ends
+			// it, as the player would, so the view shows.
+			if w.Dialog() != nil {
+				a.Update(&ui.Input{Keys: []ui.Key{ui.KeyEscape}})
+			}
 			w.FreeCamOn = v.input == "" && v.party == nil // the M3 views
-			if v.party != nil {
-				w.Cam = *v.party
-				w.SetPartyFromCam()
+			if v.setup != nil {
+				v.setup(w)
+			}
+			if v.party != nil || v.setup != nil {
+				if v.party != nil {
+					w.Cam = *v.party
+					w.SetPartyFromCam()
+				}
 				Compose(a, v.w, v.h)
 				sc, err := ui.ParseScript(v.click)
 				if err != nil {

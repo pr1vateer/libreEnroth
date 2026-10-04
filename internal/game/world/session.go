@@ -1,7 +1,10 @@
 package world
 
 import (
+	"log"
+
 	"libre-enroth/internal/game/clock"
+	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/ui"
 )
@@ -31,6 +34,12 @@ type Session struct {
 	arrival *Arrival     // where a MoveToMap puts the party on the next map
 	carry   *party.Party // the party leaving the last map (its buffs carry over)
 	stubbed map[[2]int]bool
+	noted   map[string]bool
+	// NPCs is the game's NPC table (made from npcdata.txt on first use).
+	NPCs *npc.State
+	// deferredNPC is a SpeakNPC of an OnMapReload, opened once the map is up
+	// (g_evtDeferredNpc 0x5db82c).
+	deferredNPC int
 	// timerScan is the game time of the last timer scan (0x587db0, Timers.Scan).
 	timerScan clock.Time
 }
@@ -55,6 +64,14 @@ func (s *Session) status() Status {
 		return noStatus{}
 	}
 	return s.Status
+}
+
+func (s *Session) logf(format string, args ...any) {
+	if s.Log != nil {
+		s.Log(format, args...)
+		return
+	}
+	log.Printf(format, args...)
 }
 
 func (s *Session) global(i int) string {

@@ -33,3 +33,34 @@ func TestCell(t *testing.T) {
 		t.Errorf("empty input: %d rows", n)
 	}
 }
+
+func TestLines(t *testing.T) {
+	in := "head\r\n1\tA \"x\"\nmore\r\n\r\n2\tB\r\n"
+	got := Lines([]byte(in))
+	// The final "\n" is a token of its own: an empty last line, as strtok sees it.
+	want := []string{"head", "1\tA \"x\"\nmore", "", "2\tB", ""}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Lines = %q, want %q", got, want)
+	}
+}
+
+func TestStripQuotes(t *testing.T) {
+	for in, want := range map[string]string{`"ab"`: "ab", `"ab`: "a", `ab"`: `ab"`, `"`: "", "": "", `"a "" b"`: `a "" b`} {
+		if got := StripQuotes(in); got != want {
+			t.Errorf("StripQuotes(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAtoi(t *testing.T) {
+	for in, want := range map[string]int32{"12": 12, " -7x": -7, "+3": 3, "x": 0, "": 0, "4294967297": 1, "1.5": 1} {
+		if got := Atoi(in); got != want {
+			t.Errorf("Atoi(%q) = %d, want %d", in, got, want)
+		}
+	}
+	for in, want := range map[string]float64{"1.5": 1.5, "2": 2, "": 0, "x": 0, " 0.75 ": 0.75, "3.": 3} {
+		if got := Atof(in); got != want {
+			t.Errorf("Atof(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

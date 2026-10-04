@@ -78,6 +78,7 @@ func (w *World) loadScripts(d *assets.Data) error {
 //
 // mm8: 0x46411c (map load: Level_Load, then Evt_InitTimers 0x441caf)
 func (w *World) enter() {
+	w.S.deferredNPC = 0
 	w.vm.MapReload()
 	var last clock.Time
 	if dl := w.delta(); dl != nil {
@@ -382,8 +383,8 @@ func (w *World) interactObject(pid uint32) bool {
 }
 
 // Hover is the status line text for UI point (x, y) in the view: the hint of a face's
-// or decoration's event, an interactive decoration's event name (M6) or a decoration's
-// name. "" clears the hover text.
+// or decoration's event, an interactive decoration's topic name (npctopic.txt of its
+// event) or a decoration's name. "" clears the hover text.
 //
 // mm8: 0x420aab (Mouse_UpdateHover, viewport part), 0x4424e6 (Evt_HoverText)
 func (w *World) Hover(x, y int) string {
@@ -408,7 +409,10 @@ func (w *World) Hover(x, y int) string {
 		case d.event != 0:
 			return w.hoverText(int(d.event))
 		case interactive(*d.idx):
-			return "" // the 2DEvents event name: M6
+			if mv := w.MapVars(); mv != nil && int(d.evar) >= 0 && int(d.evar) < len(mv) {
+				return w.interactiveName(decodeEvent(int(mv[d.evar])))
+			}
+			return ""
 		case *d.idx > 0 && *d.idx < len(w.tables.Decs):
 			return w.tables.Decs[*d.idx].GameName
 		}
@@ -455,9 +459,6 @@ func (w *World) Str(i int) string {
 	return w.strs[i]
 }
 
-// NPCText implements evt.Host: npctext.txt is M6's.
-func (w *World) NPCText(int) string { return "" }
-
 // Global implements evt.Host.
 func (w *World) Global(i int) string { return w.S.global(i) }
 
@@ -475,9 +476,6 @@ func (w *World) Status(text string, seconds int) { w.S.status().Show(text, secon
 
 // Message implements evt.Host: the map's message text (drawn by M6's dialogue box).
 func (w *World) Message(text string) { w.MessageText = text }
-
-// Reply implements evt.Host: the NPC dialogue's reply (M6).
-func (w *World) Reply(text string) { w.ReplyText = text }
 
 // Teleport implements evt.Host: the party moves within the map, at rest.
 //
@@ -699,12 +697,6 @@ func (w *World) PartyBuff(i int) bool { return i == 7 && w.group.Fly }
 
 // Flying implements evt.Host.
 func (w *World) Flying() bool { return w.group.Flying }
-
-// QuestText implements evt.Host (quests.txt is M6's).
-func (w *World) QuestText(int) bool { return false }
-
-// AutonoteText implements evt.Host (autonote.txt is M6's).
-func (w *World) AutonoteText(int) bool { return false }
 
 // Stub implements evt.Host: what later milestones do is logged once per opcode or
 // variable.

@@ -2,10 +2,12 @@ package evt
 
 import (
 	"encoding/binary"
+	"fmt"
 	"slices"
 	"testing"
 
 	"libre-enroth/internal/game/clock"
+	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 )
 
@@ -21,6 +23,12 @@ type fakeHost struct {
 	moves  []string
 	nothin int
 	stubs  []Op
+	npcs   *npc.State
+	houses []int
+	speak  [][2]int // npc, canShow
+	susp   []Suspension
+	reply  []string
+	notes  []string
 }
 
 func newHost(members int) *fakeHost {
@@ -41,7 +49,7 @@ func (h *fakeHost) Global(int) string                   { return "%lu" }
 func (h *fakeHost) NothingHere()                        { h.nothin++ }
 func (h *fakeHost) Status(text string, _ int)           { h.status = append(h.status, text) }
 func (h *fakeHost) Message(string)                      {}
-func (h *fakeHost) Reply(string)                        {}
+func (h *fakeHost) Reply(s string)                      { h.reply = append(h.reply, s) }
 func (h *fakeHost) Teleport(x, y, z, d, l, v int32)     {}
 func (h *fakeHost) SetDoor(id, action int)              { h.doors = append(h.doors, [2]int{id, action}) }
 func (h *fakeHost) StopDoor(int)                        {}
@@ -56,6 +64,17 @@ func (h *fakeHost) Flying() bool                        { return false }
 func (h *fakeHost) QuestText(int) bool                  { return false }
 func (h *fakeHost) AutonoteText(int) bool               { return false }
 func (h *fakeHost) Stub(op Op, _ Record, _ Var)         { h.stubs = append(h.stubs, op) }
+func (h *fakeHost) NPCs() *npc.State                    { return h.npcs }
+func (h *fakeHost) NPCChanged(op Op, id int)            { h.notes = append(h.notes, fmt.Sprint(op, id)) }
+func (h *fakeHost) SpeakInHouse(house int)              { h.houses = append(h.houses, house) }
+func (h *fakeHost) Suspend(s Suspension)                { h.susp = append(h.susp, s) }
+func (h *fakeHost) SpeakNPC(id int, canShow bool) {
+	c := 0
+	if canShow {
+		c = 1
+	}
+	h.speak = append(h.speak, [2]int{id, c})
+}
 func (h *fakeHost) MoveToMap(name string, x, y, z, d, l, v int32) {
 	h.moves = append(h.moves, name)
 }

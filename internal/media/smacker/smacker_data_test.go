@@ -2,9 +2,9 @@ package smacker_test
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"image"
 	"image/draw"
-	"fmt"
 	"io"
 	"path/filepath"
 	"strings"

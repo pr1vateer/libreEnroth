@@ -386,7 +386,7 @@ func (p *partyCreate) Update(in *Input) Transition {
 			// The original also requires PointsLeft() == 0 and two extra skills
 			// (0x49170c, 0x4916e0); point allocation and skills arrive with M7.
 			// The hero becomes member 1; any further members come from -party.
-			hero := party.Player{Name: p.Name(), Face: p.face, Voice: p.voice}
+			hero := party.Player{Name: p.Name(), Face: p.face, Voice: p.voice, Class: p.class()}
 			if m := p.r.Party; len(m.Players) == 0 {
 				m.Players = []party.Player{hero}
 			} else {

@@ -34,7 +34,7 @@ func newTestAppParty(t *testing.T, start State, faces []int) *App {
 	if faces != nil {
 		r.Party.Players = nil
 		for _, f := range faces {
-			r.Party.Players = append(r.Party.Players, party.Player{Face: f, Voice: f})
+			r.Party.Players = append(r.Party.Players, party.Player{Face: f, Voice: f, Class: ClassForFace(f)})
 		}
 	}
 	a, err := NewApp(r, start)
@@ -78,11 +78,11 @@ var screenHashes = map[string]string{
 	"create_idle":        "6ae54a44656893fa797058299aea2787b59ea1de72d04c9c36d1713e664f8938",
 	"create_name_face5":  "b82d890ff1d02aae347237339f753835f313cc7c762ac0911a9d265fd5a61a15",
 	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
-	"ingame":             "c4ced0148d3735d0e1de2e009ad4cc9c805531957cf1a85c29fb90794b03e488",
-	"ingame_party5_sel3": "7883b1e3c792b3d6fb68de26624611f3b5958bc55e2b0d39de002be385e90795",
+	"ingame":             "78a921cbfba3384176072faccd22d343db0faf930fcbcfd26490b7f268539b77",
+	"ingame_party5_sel3": "7f85abd6c6baef83429079e43b40a3641ed772104a4ccd9d49adfc4e2940b777",
 	// rest_test.go
 	"rest_open":  "994896d6b406f9ab0509ef642000266cf883b89142a9a2fe1bbef07c4dec2236",
-	"hover_time": "1a96753cc74511868a3fa65bd4dc4143a38e04bad14d7b8a0cfeef1392dd8e2e",
+	"hover_time": "21c5f4b8a19efe3c3ff10ed0203c6cfc0f90dbf36e48d1a5eb4ee6084f61816a",
 }
 
 func TestScreens(t *testing.T) {

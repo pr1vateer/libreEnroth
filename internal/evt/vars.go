@@ -57,6 +57,7 @@ const (
 	txtFoodLost   = 0x1f8
 	txtFoodSet    = 0x1f5
 	txtGoldSet    = 500
+	txtPartyFull  = 0x2bf // "Party is full!"
 )
 
 // partyVar reports a variable that is not about one member (the stats of members are
@@ -163,7 +164,7 @@ func (r *run) compare(p int, v Var, value uint32) bool {
 	case v == VarInvisible:
 		return h.PartyBuff(11)
 	case v == VarInParty:
-		return m.InParty != nil && m.InParty(int(value))
+		return m.RosterSlot(int(value)) >= 0 // mm8: 0x48dd0e
 	case !partyVar(v):
 		h.Stub(OpCompare, nil, v)
 	}
@@ -259,8 +260,11 @@ func (r *run) add(p int, v Var, value uint32) {
 	case v >= VarArenaFirst && v <= VarArenaLast:
 		m.ArenaWins[v-VarArenaFirst] += byte(value)
 	case v == VarInParty:
-		// Joining the party is M6's (0x48dc48); the quest bit id+400 is set either way.
-		h.Stub(OpAdd, nil, v)
+		// mm8: 0x48dc48 (Party_AddRosterMember); "Party is full!" becomes the reply. The
+		// quest bit id+400 is set either way.
+		if m.AddRoster(int(value)) == -2 {
+			h.Reply(r.global(txtPartyFull))
+		}
 		m.QBits.Set(int(int16(value)+400), true)
 	case v == VarHour, v == VarDayOfYear, v == VarDayOfWeek, v == VarFlying, v == VarMonth,
 		v == VarLocation0C, v == VarInvisible:
@@ -341,7 +345,8 @@ func (r *run) sub(p int, v Var, value uint32) {
 	case v >= VarArenaFirst && v <= VarArenaLast:
 		m.ArenaWins[v-VarArenaFirst] -= byte(value)
 	case v == VarInParty:
-		h.Stub(OpSubtract, nil, v) // leaving the party (0x48dbc2) is M6's
+		// mm8: 0x48dbc2 (Party_RemoveMember): the value is a party slot, not a roster id.
+		m.RemoveMember(int(value))
 	case partyVar(v):
 		// the rest of the party variables cannot be subtracted
 	default:

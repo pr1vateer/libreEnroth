@@ -11,8 +11,10 @@ import (
 	"libre-enroth/internal/assets"
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/assets/lod"
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/assets/txt"
 	"libre-enroth/internal/evt"
+	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/game/ui"
@@ -27,29 +29,21 @@ type Tables struct {
 	TFT      desc.TFT
 	MapStats *txt.Table
 	Global   *evt.Script // global.evt
-	Houses   *txt.Table  // 2DEvents.txt
+	// Game are the house, NPC and dialogue tables (tables.Load).
+	Game *tables.All
 }
 
-// HouseName is the name of 2DEvents.txt entry id (column 5), "" if none.
+// HouseName is the name of 2DEvents house id, "" if none.
 //
 // mm8: 0x4414e8 (Txt_Load2DEvents: row id at 0x5a5670 + id*0x34, name at +4)
 func (t *Tables) HouseName(id int) string {
-	if t.Houses == nil {
+	if t.Game == nil {
 		return ""
 	}
-	for _, row := range t.Houses.Rows {
-		if len(row) > 5 && strings.TrimSpace(row[0]) == fmt.Sprint(id) {
-			return stripQuotes(row[5])
-		}
+	if h := t.Game.House(id); h != nil {
+		return h.Name
 	}
 	return ""
-}
-
-func stripQuotes(s string) string {
-	if len(s) > 0 && s[0] == '"' {
-		return s[1:max(len(s)-1, 1)]
-	}
-	return s
 }
 
 // LoadTables reads the descriptor tables from the language LODs.
@@ -78,9 +72,11 @@ func LoadTables(d *assets.Data) (*Tables, error) {
 	parse("dsft.bin", func(b []byte) (e error) { t.SFT, e = desc.ParseSFT(b); return })
 	parse("dtft.bin", func(b []byte) (e error) { t.TFT, e = desc.ParseTFT(b); return })
 	parse("mapstats.txt", func(b []byte) error { t.MapStats = txt.Parse(b); return nil })
-	parse("2devents.txt", func(b []byte) error { t.Houses = txt.Parse(b); return nil })
 	// mm8: 0x441a6f (Evt_LoadGlobal)
 	parse("global.evt", func(b []byte) (e error) { t.Global, e = evt.Parse(b, evt.GlobalMaxBytes); return })
+	if err == nil {
+		t.Game, err = tables.Load(d)
+	}
 	return t, err
 }
 
@@ -123,8 +119,11 @@ type World struct {
 	timers *evt.Timers
 	travel *Arrival      // a MoveToMap to another map, done after the frame
 	frame  *render.Frame // the last rendered view, for picking
-	// MessageText and ReplyText are the map's message and the NPC reply (M6 shows them).
+	// MessageText and ReplyText are the map's message (g_evtMessage 0x5c678c) and the
+	// dialogue reply (0xffd350).
 	MessageText, ReplyText string
+	dialog                 *dialog.Dialog
+	message                *message
 	tex                    *TextureCache
 	tables                 *Tables
 	outdoor                *Outdoor
@@ -162,6 +161,9 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 		}
 	}
 	w.group.Hooks = eventHooks{w: w}
+	if m := s.Party; m.Roster == nil && tables.Game != nil {
+		m.Roster = party.NewRoster(tables.Game.Roster)
+	}
 	if c := s.carry; c != nil {
 		w.group.Fly, w.group.WaterWalk, w.group.FeatherFall, w.group.Levitate = c.Fly, c.WaterWalk, c.FeatherFall, c.Levitate
 		w.group.TurnDelta = c.TurnDelta

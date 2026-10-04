@@ -8,6 +8,8 @@ import (
 	"libre-enroth/internal/assets"
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/assets/exe"
+	"libre-enroth/internal/assets/txt"
+	"libre-enroth/internal/assets/vid"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
@@ -33,6 +35,10 @@ type Resources struct {
 
 	// LoadWorld loads a map for the in-game screen; nil leaves the viewport empty.
 	LoadWorld func(name string) (World, error)
+	dialogArt *dialogArt
+	vids      vid.Set
+	vidErr    error
+
 	// StartMap is the map a new game begins on.
 	//
 	// mm8: 0x45f682 (Game_NewGame: "out01.odm")
@@ -43,7 +49,7 @@ type Resources struct {
 func NewResources(d *assets.Data) *Resources {
 	return &Resources{
 		Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}, StartMap: "out01.odm",
-		Party:  &party.Members{Players: []party.Player{{}}},
+		Party:  &party.Members{Players: []party.Player{{Class: ClassForFace(0)}}},
 		Rand:   party.NewRand(1),
 		Status: &Status{},
 	}
@@ -151,18 +157,11 @@ func ParseGlobal(raw []byte) []string {
 		cols := strings.SplitN(string(row), "\t", 3)
 		s := ""
 		if len(cols) > 1 && cols[0] != "" {
-			s = stripQuotes(cols[1])
+			s = txt.StripQuotes(cols[1])
 		}
 		out = append(out, s)
 	}
 	return out
-}
-
-func stripQuotes(s string) string {
-	if len(s) > 0 && s[0] == '"' {
-		return s[1 : len(s)-1]
-	}
-	return s
 }
 
 // loader collects the first error while a screen loads many assets.

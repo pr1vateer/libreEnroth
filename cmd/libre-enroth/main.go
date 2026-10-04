@@ -3,7 +3,7 @@
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
 //	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
 //	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y] [-input script] [-freecam]
-//	             [-party face,face,...] [-event N]
+//	             [-party face,face,...] [-event N] [-house N] [-npc N]
 //
 // In game, the original's default keys: Up/Down walk, Left/Right turn (Ctrl: strafe),
 // [ and ] strafe, Shift runs (U toggles always-run), X jumps, PgDn/Delete/End look
@@ -57,6 +57,8 @@ func main() {
 		freeCam    = flag.Bool("freecam", false, "start with the free camera (F3) instead of the party")
 		partyFlag  = flag.String("party", "", "debug party: 1-5 portrait faces 0-27 (as in party creation), e.g. 0,5,12; a created hero replaces the first")
 		eventFlag  = flag.Int("event", 0, "run this map event (of the map's .evt) once the first map is loaded")
+		houseFlag  = flag.Int("house", 0, "open this 2DEvents house's dialogue once the first map is loaded")
+		npcFlag    = flag.Int("npc", 0, "open this NPC's dialogue once the first map is loaded")
 	)
 	flag.Parse()
 
@@ -133,8 +135,10 @@ func main() {
 		resources.StartMap = *mapFlag
 	}
 	for i, f := range faces {
-		p := party.Player{Face: f, Voice: f}
+		// Debug members after the hero are not roster characters.
+		p := party.Player{Face: f, Voice: f, Class: ui.ClassForFace(f), RosterID: -1}
 		if i == 0 {
+			p.RosterID = 0
 			resources.Party.Players[0] = p
 		} else {
 			resources.Party.Players = append(resources.Party.Players, p)
@@ -167,6 +171,14 @@ func main() {
 		if *eventFlag != 0 {
 			w.RunEvent(*eventFlag, true)
 			*eventFlag = 0
+		}
+		if *houseFlag != 0 {
+			w.SpeakInHouse(*houseFlag)
+			*houseFlag = 0
+		}
+		if *npcFlag != 0 {
+			w.SpeakNPC(*npcFlag, true)
+			*npcFlag = 0
 		}
 		return w, nil
 	}
