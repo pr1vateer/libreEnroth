@@ -1,6 +1,7 @@
-// Package party is the party's movement: the action queue the keyboard fills and the
+// Package party is the party: its movement (the action queue the keyboard fills and the
 // per-frame indoor and outdoor move functions, ported in the original's integer
-// arithmetic on top of internal/game/physics (re/notes/physics.md).
+// arithmetic on top of internal/game/physics, re/notes/physics.md) and its members
+// (player.go: conditions and the portrait expressions, re/notes/ui.md).
 package party
 
 import "libre-enroth/internal/game/physics"

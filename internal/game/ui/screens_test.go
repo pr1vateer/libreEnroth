@@ -11,6 +11,7 @@ import (
 
 	"libre-enroth/internal/assets"
 	"libre-enroth/internal/assets/assettest"
+	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 )
 
@@ -18,12 +19,25 @@ var update = flag.Bool("update", false, "write the rendered screens to <module>/
 
 func newTestApp(t *testing.T, start State) *App {
 	t.Helper()
+	return newTestAppParty(t, start, nil)
+}
+
+// newTestAppParty starts with a party of these faces (nil: the default one member).
+func newTestAppParty(t *testing.T, start State, faces []int) *App {
+	t.Helper()
 	d, err := assets.OpenAll(assettest.Dir(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { d.Close() })
-	a, err := NewApp(NewResources(d), start)
+	r := NewResources(d)
+	if faces != nil {
+		r.Party.Players = nil
+		for _, f := range faces {
+			r.Party.Players = append(r.Party.Players, party.Player{Face: f, Voice: f})
+		}
+	}
+	a, err := NewApp(r, start)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,15 +70,16 @@ func repeat(in Input, n int) []Input {
 // Frozen SHA-256s of the 640x480 RGBA canvas (no game-derived image is committed).
 // Regenerate with: MM8_DATA=../games_mm8 go test ./internal/game/ui -run Screens -update
 var screenHashes = map[string]string{
-	"title_idle":        "a5f814033eaf54f6e44dd4cf5e3d7157113b9c3f79c7b45d2bed723fb795213c",
-	"title_hover_new":   "61a8085d4adea3a7d95a2d95ebf70942b620b6a10dc7fb000d653722f0917125",
-	"title_press_quit":  "9131d31a3d51d466841a17e1f0c9ef3721d0ce5d92723594691fbf957c848a8b",
-	"title_load_toast":  "1c542d892afa13954666927ca1812eefca652b79f22a1e4baca59c5d9cba1187",
-	"credits_300":       "4526fd63c8da5984c4dd53f03e7b29a945c51863e27bd09ae47643b583cf9ebd",
-	"create_idle":       "6ae54a44656893fa797058299aea2787b59ea1de72d04c9c36d1713e664f8938",
-	"create_name_face5": "b82d890ff1d02aae347237339f753835f313cc7c762ac0911a9d265fd5a61a15",
-	"create_troll":      "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
-	"ingame":            "70f22458c08c729880a7a5e913f38eee0d4fd326c0236706f997204b52ef3bcb",
+	"title_idle":         "a5f814033eaf54f6e44dd4cf5e3d7157113b9c3f79c7b45d2bed723fb795213c",
+	"title_hover_new":    "61a8085d4adea3a7d95a2d95ebf70942b620b6a10dc7fb000d653722f0917125",
+	"title_press_quit":   "9131d31a3d51d466841a17e1f0c9ef3721d0ce5d92723594691fbf957c848a8b",
+	"title_load_toast":   "1c542d892afa13954666927ca1812eefca652b79f22a1e4baca59c5d9cba1187",
+	"credits_300":        "4526fd63c8da5984c4dd53f03e7b29a945c51863e27bd09ae47643b583cf9ebd",
+	"create_idle":        "6ae54a44656893fa797058299aea2787b59ea1de72d04c9c36d1713e664f8938",
+	"create_name_face5":  "b82d890ff1d02aae347237339f753835f313cc7c762ac0911a9d265fd5a61a15",
+	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
+	"ingame":             "c4ced0148d3735d0e1de2e009ad4cc9c805531957cf1a85c29fb90794b03e488",
+	"ingame_party5_sel3": "7883b1e3c792b3d6fb68de26624611f3b5958bc55e2b0d39de002be385e90795",
 }
 
 func TestScreens(t *testing.T) {
@@ -73,31 +88,34 @@ func TestScreens(t *testing.T) {
 		start State
 		in    []Input
 		state State
+		party []int
 	}
 	typed := []Input{{X: 300, Y: 20, Runes: []rune("Zoltan")}}
 	scenes := []scene{
-		{"title_idle", StateTitle, []Input{{X: 100, Y: 100}}, StateTitle},
-		{"title_hover_new", StateTitle, []Input{{X: 560, Y: 215}}, StateTitle},
-		{"title_press_quit", StateTitle, []Input{{X: 560, Y: 330}, {X: 560, Y: 330, Left: true, LeftPressed: true}}, StateTitle},
-		{"title_load_toast", StateTitle, []Input{{X: 560, Y: 255, Left: true, LeftPressed: true}, {X: 560, Y: 255, LeftReleased: true}}, StateTitle},
-		{"credits_300", StateCredits, repeat(Input{X: 700, Y: 0}, 300), StateCredits},
-		{"create_idle", StateCreate, []Input{{X: 600, Y: 20}}, StateCreate},
+		{"title_idle", StateTitle, []Input{{X: 100, Y: 100}}, StateTitle, nil},
+		{"title_hover_new", StateTitle, []Input{{X: 560, Y: 215}}, StateTitle, nil},
+		{"title_press_quit", StateTitle, []Input{{X: 560, Y: 330}, {X: 560, Y: 330, Left: true, LeftPressed: true}}, StateTitle, nil},
+		{"title_load_toast", StateTitle, []Input{{X: 560, Y: 255, Left: true, LeftPressed: true}, {X: 560, Y: 255, LeftReleased: true}}, StateTitle, nil},
+		{"credits_300", StateCredits, repeat(Input{X: 700, Y: 0}, 300), StateCredits, nil},
+		{"create_idle", StateCreate, []Input{{X: 600, Y: 20}}, StateCreate, nil},
 		{"create_name_face5", StateCreate, append(typed,
 			Input{X: 170, Y: 170, Left: true, LeftPressed: true}, Input{X: 170, Y: 170, LeftReleased: true},
 			Input{X: 170, Y: 170, Left: true, LeftPressed: true}, Input{X: 170, Y: 170, LeftReleased: true},
 			Input{X: 170, Y: 170, Left: true, LeftPressed: true}, Input{X: 170, Y: 170, LeftReleased: true},
 			Input{X: 170, Y: 170, Left: true, LeftPressed: true}, Input{X: 170, Y: 170, LeftReleased: true},
 			Input{X: 170, Y: 170, Left: true, LeftPressed: true}, Input{X: 170, Y: 170, LeftReleased: true},
-		), StateCreate},
+		), StateCreate, nil},
 		{"create_troll", StateCreate, []Input{
 			{X: 75, Y: 170, Left: true, LeftPressed: true}, {X: 75, Y: 170, LeftReleased: true},
 			{X: 75, Y: 170, Left: true, LeftPressed: true}, {X: 75, Y: 170, LeftReleased: true},
-		}, StateCreate},
-		{"ingame", StateInGame, []Input{{X: 320, Y: 200}}, StateInGame},
+		}, StateCreate, nil},
+		{"ingame", StateInGame, []Input{{X: 320, Y: 200}}, StateInGame, nil},
+		// Five members, '3' selects the third; after 440 ticks it shows an idle face.
+		{"ingame_party5_sel3", StateInGame, append([]Input{{X: 320, Y: 200, Keys: []Key{'3'}}}, repeat(Input{X: 320, Y: 200}, 439)...), StateInGame, []int{0, 5, 12, 17, 22}},
 	}
 	for _, sc := range scenes {
 		t.Run(sc.name, func(t *testing.T) {
-			a := newTestApp(t, sc.start)
+			a := newTestAppParty(t, sc.start, sc.party)
 			if run(t, a, sc.in...) {
 				t.Fatal("quit")
 			}

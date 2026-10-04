@@ -314,3 +314,87 @@ func (t TFT) At(first, tick int) int {
 	}
 	return i
 }
+
+// PlayerFrame is one dpft.bin record (10 bytes): a frame of a portrait expression.
+type PlayerFrame struct {
+	Expr    int // +0: expression id on a sequence's first record, 0 on the others
+	Texture int // +2: face frame t, icons.lod "<prefix>%02d"
+	Time    int // +4: duration in ticks >> 3
+	Total   int // +6: the sequence's summed Time, on its first record
+	Flags   int // +8: PlayerFrameMore, PlayerFrameNew
+}
+
+// Player frame flags (pft.def, Pft_LoadDef 0x494d91).
+const (
+	PlayerFrameMore = 0x1 // the next record continues this sequence
+	PlayerFrameNew  = 0x4 // "New": starts a sequence
+)
+
+// PFT is the player (portrait) frame table.
+type PFT []PlayerFrame
+
+// ParsePFT parses dpft.bin.
+//
+// mm8: 0x494d46 (Pft_LoadBin)
+func ParsePFT(b []byte) (PFT, error) {
+	const size = 10
+	n, err := records("dpft", b, size)
+	if err != nil {
+		return nil, err
+	}
+	t := make(PFT, n)
+	for i := range t {
+		r := b[4+i*size:]
+		u := func(o int) int { return int(le.Uint16(r[o:])) }
+		t[i] = PlayerFrame{Expr: u(0), Texture: u(2), Time: u(4), Total: u(6), Flags: u(8)}
+	}
+	return t, nil
+}
+
+// Find returns the index of the first record of expression expr, or 0.
+//
+// mm8: 0x494c1d (Pft_Find)
+func (t PFT) Find(expr int) int {
+	for i, f := range t {
+		if f.Expr == expr {
+			return i
+		}
+	}
+	return 0
+}
+
+// FrameAt returns the index of the record of the sequence starting at i that shows at
+// time t (ticks into the expression).
+//
+// mm8: 0x494c40 (Pft_FrameAt)
+func (t PFT) FrameAt(i, time int) int {
+	if i < 0 || i >= len(t) {
+		return i
+	}
+	if f := t[i]; f.Flags&PlayerFrameMore != 0 && f.Total != 0 {
+		rem := (time >> 3) % f.Total
+		for i < len(t)-1 && t[i].Time < rem {
+			rem -= t[i].Time
+			i++
+		}
+	}
+	return i
+}
+
+// TalkFrame advances a talking face (expression 0x15) by ticks: when the current talk
+// record (*frame, one of 0x15..0x18) has run its course, rand picks the next one. It
+// returns the record to show.
+//
+// mm8: 0x494c95 (Pft_TalkFrame)
+func (t PFT) TalkFrame(frame, time *int, ticks int, rand func() int) int {
+	next := *time + ticks
+	if next < t[*frame].Time*8 {
+		*time = next
+	} else {
+		*frame = rand()%4 + 0x15
+		// The original reduces the time by the new record's Time and scales by 8
+		// afterwards ((t % time) << 3), not (t % (time << 3)).
+		*time = next % t[*frame].Time << 3
+	}
+	return *frame
+}

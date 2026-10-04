@@ -85,6 +85,7 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - **Space/C** fly up/down, **Shift** moves 4× faster, right-drag looks around.
   - **F2** (indoors) opens every closed door and closes every open one.
   - **+/−** next to the minimap zoom it (outdoors).
+  - **1–5** or a click on a portrait selects a party member.
   - **Esc** returns to the title (the original's game menu comes later).
 
 ## Developer options
@@ -97,6 +98,7 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
 | `-map name` | start in game on a `games.lod` map, e.g. `out01.odm`, `out02.odm`, `d05.blv`, `eleme.blv` (implies `-state ingame`) |
 | `-cam x,y,z,yaw,pitch` | camera position (z of the feet; the eye is 160 higher) and angles in 2048ths of a turn (0 = east, 512 = north) |
 | `-time HH:MM` | time of day for the outdoor lighting (default 9:00) |
+| `-party 0,5,12` | a party of 1–5 portrait faces (0–27, as in party creation); a created hero replaces the first. Default: one member with face 0 |
 
 Outdoors the camera starts at the new-game spawn for `out01.odm`, elsewhere above the map
 centre. Indoors it starts on the map's "Party Start" marker.

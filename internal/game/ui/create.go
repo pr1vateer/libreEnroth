@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
 )
@@ -96,6 +97,7 @@ func IsFemale(face int) bool {
 }
 
 type partyCreate struct {
+	r        *Resources
 	ct       Container
 	bg       *gfx.Sprite
 	selring  *gfx.Sprite
@@ -131,7 +133,7 @@ type partyCreate struct {
 // mm8: 0x4c7a10 (GuiPartyCreate_Build)
 func newPartyCreate(r *Resources) (*partyCreate, error) {
 	l := &loader{r: r}
-	p := &partyCreate{bg: l.pcx("makeme.pcx"), selring: l.icon("selring", false)}
+	p := &partyCreate{r: r, bg: l.pcx("makeme.pcx"), selring: l.icon("selring", false)}
 	p.chosen = [2]int{skillNone, skillNone}
 
 	// Buttons, in Build order (which is also the event order).
@@ -383,6 +385,13 @@ func (p *partyCreate) Update(in *Input) Transition {
 		case msgCreateOK:
 			// The original also requires PointsLeft() == 0 and two extra skills
 			// (0x49170c, 0x4916e0); point allocation and skills arrive with M7.
+			// The hero becomes member 1; any further members come from -party.
+			hero := party.Player{Name: p.Name(), Face: p.face, Voice: p.voice}
+			if m := p.r.Party; len(m.Players) == 0 {
+				m.Players = []party.Player{hero}
+			} else {
+				m.Players[0] = hero
+			}
 			return goTo(StateInGame)
 		case msgCancel:
 			return goTo(StateTitle)

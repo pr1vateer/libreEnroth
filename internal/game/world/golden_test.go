@@ -117,21 +117,21 @@ type view struct {
 	input string
 }
 
-// Frozen SHA-256s of the composed frames. Regenerate with:
+// Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "680f83e169088d40630060e21c575d25474cba37965c4c426f67ef21966eb83e",
-	"out01_town":  "56fd9472fff346e9761cbb166ef05b09aeabf7696d9224520517e555eff5805c",
-	"out01_sky":   "63416b6f78278e5fb05d0f5368286c8a0b06e4e23b874f053afd6e38e6e16833",
-	"out02_wide":  "ed3c7e861924fdb8534abe4e1fd2bff2c5c77e38575b6cefc2b5b536e1af78d5",
-	"d05_start":   "492ef9699f0b7520b4266e12b674da9b3cbb4e9dc242c253c8d3e14fc989212d",
-	"d05_door":    "3b60ddc36b18490989f216d9492bbb0f83feef449ff9768c01d260e2255f4331",
-	"d13_torch":   "3ec4f5fdd302c993bc3b41259e382500977a823f68c612629b7c2d9e63745739",
-	"d16_start":   "1ed937f988d98768f3890db3aa3c0444150828f1b6bd50f2b348a34cd1f92fcc",
-	"d28_stairs":  "310a9898b2a87104a27c86270c2a116cce6547ac9c341e2201a8a78b41df9340",
-	"d28_climb":   "91c8bfcdcf7590146f3f6a86fad0e858df0b6696f213ca70a0f7672592acfbcb",
-	"out01_run":   "583d74b3518c4db90df9a0372b3bb9569b9eb7c7276260be74d586999e6d1813",
-	"d05_walk":    "a05ced4a117cb042789b7a6f6b8606f2579c1ba00592eaea90f4930e125ae796",
+	"out01_spawn": "4912cbd4a6ceabded1b5b2b15ee652e0a92d5f3f54954386a89971a2b992aaf5",
+	"out01_town":  "95d7ba2edc669e9aa8ec224e2e75dd9232f4c7f1ebc0cf9c92665d853d5c6282",
+	"out01_sky":   "c043596c9cf3605b0d962484bc4de6578e3b602dc1bdcefc4384360326a440e3",
+	"out02_wide":  "f99cdbcae529270e6cffe997edc5f33d5f621210e6bb45810ee14207eabf017b",
+	"d05_start":   "c163444b1de455455565db13afa29443169c028e1d698bebeaf01b1c31b76f73",
+	"d05_door":    "fbd5c2cdc7df5a787c8056ad259fb4855b767b577c1f6d1c971742167d4a5d5e",
+	"d13_torch":   "aff2b5344b19b2bf651221e8633307f5cf66e8d61750aec39bfc0772961dc0f3",
+	"d16_start":   "b7da1a107401dcd402b87148fc61497f2e1ca60d8911e9bf3f1730d0a3cfe42c",
+	"d28_stairs":  "9ec44357c4e3b098a6a51ef2a3c9cd5d70dc1905b0044d0defc6611611b3d2b2",
+	"d28_climb":   "ee6063478ef190262c8404fd78768657e8ba10d01a186adba3084f7dcfec8e16",
+	"out01_run":   "de72e72af65332928c9852829920338b3a397426a6cf26dc61c4775378786cdc",
+	"d05_walk":    "802ef595fee3000a7aa67eeb81cccbfb06cb1eb1acd9c40131abe3e29c24bfe1",
 }
 
 var views = []view{

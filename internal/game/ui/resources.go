@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"libre-enroth/internal/assets"
+	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/assets/exe"
+	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
 )
@@ -18,6 +20,13 @@ type Resources struct {
 	Exe    *exe.Image
 	fonts  map[string]*text.Font
 	global []string
+	pft    desc.PFT
+
+	// Party is the party the in-game screen shows. Party creation puts the hero in
+	// slot 1; NewResources starts with one member with face 0.
+	Party *party.Members
+	// Rand is the game's rand(); NewResources seeds it like the MSVC runtime (1).
+	Rand *party.Rand
 
 	// LoadWorld loads a map for the in-game screen; nil leaves the viewport empty.
 	LoadWorld func(name string) (World, error)
@@ -29,7 +38,27 @@ type Resources struct {
 
 // NewResources wraps opened game data.
 func NewResources(d *assets.Data) *Resources {
-	return &Resources{Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}, StartMap: "out01.odm"}
+	return &Resources{
+		Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}, StartMap: "out01.odm",
+		Party: &party.Members{Players: []party.Player{{}}},
+		Rand:  party.NewRand(1),
+	}
+}
+
+// PFT is the portrait expression table, dpft.bin.
+//
+// mm8: 0x464974 (Game_Init -> Pft_LoadBin 0x494d46)
+func (r *Resources) PFT() (desc.PFT, error) {
+	if r.pft == nil {
+		raw, err := r.Cache.Text("dpft.bin")
+		if err != nil {
+			return nil, err
+		}
+		if r.pft, err = desc.ParsePFT(raw); err != nil {
+			return nil, err
+		}
+	}
+	return r.pft, nil
 }
 
 // Font loads a .fnt bound to FONTPAL.

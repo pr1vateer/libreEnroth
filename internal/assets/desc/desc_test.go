@@ -112,6 +112,64 @@ func TestTFT(t *testing.T) {
 	}
 }
 
+func pftBytes(recs [][5]int) []byte {
+	b := make([]byte, 4+10*len(recs))
+	binary.LittleEndian.PutUint32(b, uint32(len(recs)))
+	for i, r := range recs {
+		for j, v := range r {
+			put16(b, 4+10*i+2*j, v)
+		}
+	}
+	return b
+}
+
+func TestPFT(t *testing.T) {
+	// expr 0 and 1 single frames; expr 9 a 3-record sequence (times 2, 3, 4 = 9).
+	p, err := ParsePFT(pftBytes([][5]int{
+		{0, 1, 8, 8, PlayerFrameNew}, {1, 1, 8, 8, PlayerFrameNew},
+		{9, 5, 2, 9, PlayerFrameNew | PlayerFrameMore}, {0, 6, 3, 0, PlayerFrameMore}, {0, 7, 4, 0, 0},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Find(1) != 1 || p.Find(9) != 2 || p.Find(0x62) != 0 {
+		t.Errorf("Find: %d %d %d", p.Find(1), p.Find(9), p.Find(0x62))
+	}
+	// rem = (t >> 3) % 9; a record shows while its Time >= the remainder left.
+	for _, c := range []struct{ time, want int }{{0, 2}, {23, 2}, {24, 3}, {40, 3}, {48, 4}, {71, 4}, {72, 2}, {16 * 8, 4}} {
+		if got := p.FrameAt(2, c.time); got != c.want {
+			t.Errorf("FrameAt(2, %d) = %d, want %d", c.time, got, c.want)
+		}
+	}
+	if p.FrameAt(1, 1000) != 1 {
+		t.Error("single frame animated")
+	}
+	if _, err := ParsePFT(pftBytes(nil)[:3]); err == nil {
+		t.Error("truncated table accepted")
+	}
+}
+
+func TestPFTTalk(t *testing.T) {
+	recs := make([][5]int, 0x19)
+	for i := range recs {
+		recs[i] = [5]int{i, i, 8, 8, PlayerFrameNew}
+	}
+	recs[0x15][2], recs[0x16][2] = 2, 3
+	p, _ := ParsePFT(pftBytes(recs))
+	frame, time := 0x15, 0
+	if p.TalkFrame(&frame, &time, 15, func() int { panic("rand") }) != 0x15 || time != 15 {
+		t.Fatalf("within the frame: %#x %d", frame, time)
+	}
+	// 15 + 3 = 18 >= 2*8: rand 5 -> 0x16, time (18 % 3) << 3 = 0.
+	if p.TalkFrame(&frame, &time, 3, func() int { return 5 }) != 0x16 || time != 0 {
+		t.Fatalf("next: %#x %d", frame, time)
+	}
+	time = 20
+	if p.TalkFrame(&frame, &time, 5, func() int { return 7 }) != 0x18 || time != (25%8)<<3 {
+		t.Fatalf("next: %#x %d", frame, time)
+	}
+}
+
 // TestShipped parses the tables of EnglishT.lod.
 func TestShipped(t *testing.T) {
 	d, err := assets.OpenAll(assettest.Dir(t))
@@ -151,5 +209,19 @@ func TestShipped(t *testing.T) {
 	tf, err := ParseTFT(load("dtft.bin"))
 	if err != nil || len(tf) != 25 {
 		t.Fatalf("dtft: %d, %v", len(tf), err)
+	}
+	// dpft.bin: 764 bytes = 4 + 76 x 10. Expression 1 is the plain face (texture 1),
+	// 0x15..0x18 the talking frames; the condition faces 0x62/0x63 are not in it.
+	pft, err := ParsePFT(load("dpft.bin"))
+	if err != nil || len(pft) != 76 {
+		t.Fatalf("dpft: %d, %v", len(pft), err)
+	}
+	if pft[pft.Find(1)].Texture != 1 || pft.Find(0x15) != 0x15 || pft.Find(0x62) != 0 {
+		t.Errorf("dpft: expr 1 %+v, talk %d", pft[pft.Find(1)], pft.Find(0x15))
+	}
+	for i, f := range pft {
+		if f.Texture < 1 || f.Texture > 56 {
+			t.Errorf("dpft %d: texture %d", i, f.Texture)
+		}
 	}
 }

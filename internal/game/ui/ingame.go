@@ -29,6 +29,7 @@ type inGame struct {
 	Yaw                         int // party yaw, 0..2047 (M4)
 	world                       World
 	minimap                     *minimap
+	portraits                   *portraits
 }
 
 // newInGame builds the HUD frame around the viewport and loads mapName into it when
@@ -63,6 +64,10 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 	zoomOut := NewButton(624, 460, Msg{ID: msgZoomOut}, l.icon("map-up", false), nil, l.icon("map-ht", false))
 	g.ct.Add(zoomIn)
 	g.ct.Add(zoomOut)
+	// A new game: Party_InitNewGame runs before the HUD is built. Loading a saved game
+	// (M10) will skip it.
+	r.Party.NewGame(r.Rand)
+	g.portraits = newPortraits(l, &g.ct) // the last child (GuiGame_Build)
 	if l.err == nil && r.LoadWorld != nil && mapName != "" {
 		w, err := r.LoadWorld(mapName)
 		if err != nil {
@@ -82,6 +87,8 @@ func (g *inGame) Update(in *Input) Transition {
 	g.ct.Update(in)
 	for _, m := range g.ct.Queue.Drain() {
 		switch m.ID {
+		case msgSelectPlayer:
+			g.portraits.m.ClickPortrait(m.Param)
 		case msgGameMenu:
 			// The original opens the game menu (Esc); until M10/M12 it leads back
 			// to the title.
@@ -100,10 +107,12 @@ func (g *inGame) Update(in *Input) Transition {
 		g.world.Update(in)
 		_, _, g.Yaw = g.world.Party()
 	}
+	g.portraits.update()
 	return Transition{}
 }
 
-// Draw draws the HUD frame. The viewport is left untouched (transparent).
+// Draw draws the HUD frame and the party panel. The viewport is left untouched
+// (transparent).
 //
 // mm8: 0x4c96cd (GuiGame_Draw)
 func (g *inGame) Draw(c *gfx.Canvas) {
@@ -117,6 +126,7 @@ func (g *inGame) Draw(c *gfx.Canvas) {
 	c.ResetClip()
 	c.BlitKeyed(g.compcovr, 319-g.compcovr.W/2, 4)
 	c.BlitKeyed(g.mapframe, 482, 367)
-	// Party portraits and bars (FUN_0041bf09, FUN_0041b3de) need the party (M7).
+	// The status line (0x41bf09) and the gold/food counters (0x41b3de) come later.
 	g.ct.Draw(c)
+	g.portraits.draw(c) // the portrait panel is the last child
 }

@@ -3,10 +3,12 @@
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
 //	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
 //	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y] [-input script] [-freecam]
+//	             [-party face,face,...]
 //
 // In game, the original's default keys: Up/Down walk, Left/Right turn (Ctrl: strafe),
 // [ and ] strafe, Shift runs (U toggles always-run), X jumps, PgDn/Delete/End look
 // up/down/ahead, PgUp/Insert fly up/down and Home lands (with the fly buff).
+// 1-5 or a click on a portrait selects a party member.
 // Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking.
 // Free camera: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn pitch,
 // Space/C up and down, Shift faster, right mouse drag looks around.
@@ -18,10 +20,14 @@ import (
 	"image"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"libre-enroth/internal/assets"
 	"libre-enroth/internal/display"
 	"libre-enroth/internal/engine"
+	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/ui"
 	"libre-enroth/internal/game/world"
 )
@@ -44,6 +50,7 @@ func main() {
 		timeFlag   = flag.String("time", "9:00", "time of day HH:MM for the lighting")
 		inputFlag  = flag.String("input", "", "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60")
 		freeCam    = flag.Bool("freecam", false, "start with the free camera (F3) instead of the party")
+		partyFlag  = flag.String("party", "", "debug party: 1-5 portrait faces 0-27 (as in party creation), e.g. 0,5,12; a created hero replaces the first")
 	)
 	flag.Parse()
 
@@ -81,6 +88,12 @@ func main() {
 	if _, err := fmt.Sscanf(*timeFlag, "%d:%d", &hour, &minute); err != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
 		log.Fatalf("-time: want HH:MM")
 	}
+	var faces []int
+	if *partyFlag != "" {
+		if faces, err = parseParty(*partyFlag); err != nil {
+			log.Fatalf("-party: %v", err)
+		}
+	}
 	cfg := engine.Config{Res: res, Filter: filter, Screenshot: *screenshot, Frames: *frames}
 	if *inputFlag != "" {
 		if cfg.Script, err = ui.ParseScript(*inputFlag); err != nil {
@@ -113,6 +126,19 @@ func main() {
 	if *mapFlag != "" {
 		resources.StartMap = *mapFlag
 	}
+	for i, f := range faces {
+		p := party.Player{Face: f, Voice: f}
+		if i == 0 {
+			resources.Party.Players[0] = p
+		} else {
+			resources.Party.Players = append(resources.Party.Players, p)
+		}
+	}
+	// The game seeds rand() with GetTickCount() (Game_Init 0x464974); screenshots keep
+	// the runtime's default seed so they are reproducible.
+	if *screenshot == "" {
+		resources.Rand = party.NewRand(uint32(time.Now().UnixMilli()))
+	}
 	resources.LoadWorld = func(name string) (ui.World, error) {
 		w, err := world.Load(data, tables, tex, name)
 		if err != nil {
@@ -140,4 +166,21 @@ func main() {
 		log.Print(err)
 		os.Exit(1)
 	}
+}
+
+// parseParty parses -party: 1 to 5 comma-separated faces.
+func parseParty(s string) ([]int, error) {
+	parts := strings.Split(s, ",")
+	if len(parts) > party.MaxMembers {
+		return nil, fmt.Errorf("%d faces, at most %d", len(parts), party.MaxMembers)
+	}
+	faces := make([]int, len(parts))
+	for i, p := range parts {
+		f, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil || f < 0 || f >= ui.PortraitFaces {
+			return nil, fmt.Errorf("face %q: want 0..%d", p, ui.PortraitFaces-1)
+		}
+		faces[i] = f
+	}
+	return faces, nil
 }
