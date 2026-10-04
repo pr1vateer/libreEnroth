@@ -3,6 +3,8 @@
 //	lodtool ls  <archive>
 //	lodtool x   <archive> <glob> [-o dir]          decompressed payloads
 //	lodtool png <archive> <glob> [-o dir] [-mips]  decoded images
+//	lodtool vid ls  <file.vid>                     container entries (+ Smacker headers)
+//	lodtool vid png <file.vid> <name> [frame] [-o dir]  one decoded frame (default 0)
 //
 // Globs use path.Match syntax and ignore case. The default output directory is out/.
 package main
@@ -38,7 +40,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   lodtool ls  <archive>
   lodtool x   <archive> <glob> [-o dir]
-  lodtool png <archive> <glob> [-o dir] [-mips]`)
+  lodtool png <archive> <glob> [-o dir] [-mips]
+  lodtool vid ls  <file.vid>
+  lodtool vid png <file.vid> <name> [frame] [-o dir]`)
 	os.Exit(2)
 }
 
@@ -78,6 +82,10 @@ func main() {
 		err = extract(o)
 	case cmd == "png" && len(o.args) == 2:
 		err = toPNG(o)
+	case cmd == "vid" && len(o.args) == 2 && o.args[0] == "ls":
+		err = vidList(o.args[1])
+	case cmd == "vid" && (len(o.args) == 3 || len(o.args) == 4) && o.args[0] == "png":
+		err = vidPNG(o)
 	default:
 		usage()
 	}
