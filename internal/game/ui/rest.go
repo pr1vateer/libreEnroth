@@ -199,6 +199,22 @@ func (s *restScreen) restHeal(ticks int) {
 	sleep()
 }
 
+// restAtInn starts the inn's night: everyone heals and sleeps until an hour past the
+// next 5 AM; no food is eaten and no monsters come. (A night longer than 4 hours also
+// resets the map's monsters, 0x40928c: M8.)
+//
+// mm8: 0x42f877 (msg 0x199)
+func (s *restScreen) restAtInn(ticks int) {
+	m := s.r.Party
+	c := m.Calendar
+	s.mode = restResting
+	s.minutes = (clock.HoursTo5AM(c.Hour)+1)*60 - c.Minute
+	m.RestHeal(ticks, s.ctx)
+	for i := range m.Players {
+		m.Players[i].Conditions[party.CondAsleep] = int64(m.Time)
+	}
+}
+
 // step moves time on by 6 minutes, or what is left; at the end everyone wakes and a
 // night's rest closes the screen.
 //

@@ -66,6 +66,9 @@ type Ctx struct {
 	Hooks  TimeHooks
 }
 
+// TimeHooks returns the hooks in use (NoTimeHooks when none are set).
+func (c *Ctx) TimeHooks() TimeHooks { return c.hooks() }
+
 func (c *Ctx) hooks() TimeHooks {
 	if c.Hooks == nil {
 		return NoTimeHooks{}
@@ -169,6 +172,17 @@ func (m *Members) countCanActLast() (n, last int) {
 		}
 	}
 	return n, last
+}
+
+// TakeGold takes up to n gold (all of it when the party has less).
+//
+// mm8: 0x4931e5 (Party_TakeGold)
+func (m *Members) TakeGold(n uint32) {
+	if uint32(m.Gold) < n {
+		m.Gold = 0
+		return
+	}
+	m.Gold -= int32(n)
 }
 
 // EatFood takes n food, down to 0.
@@ -341,6 +355,21 @@ func (m *Members) AdvanceMinutes(min, ticks int, c *Ctx) bool {
 		m.reduceRecovery(i, int(d))
 	}
 	return m.UpdateTime(ticks, c)
+}
+
+// AdvanceTime is a journey's time passing at once (stables, boats, the map edges): min
+// minutes go by without UpdateTime (so no 3 AM rollover runs), then a full rest:
+// RestHeal, recovery cleared and the faces ticked once more.
+//
+// mm8: 0x4b2758
+func (m *Members) AdvanceTime(min, ticks int, c *Ctx) {
+	m.Time += clock.Time(min) * clock.Minute
+	m.Calendar = m.Time.Calendar()
+	m.RestHeal(ticks, c)
+	for i := range m.Players {
+		m.Players[i].Recovery = 0
+	}
+	m.TickExpressions(c.PFT, ticks, c.Rand)
 }
 
 // RoundEnd is the end of a turn-based round: 0xd5 ticks (50 game seconds) pass.

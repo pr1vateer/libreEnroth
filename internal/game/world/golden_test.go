@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"libre-enroth/internal/game/party"
 	"os"
 	"path/filepath"
 	"testing"
@@ -152,6 +153,13 @@ var worldHashes = map[string]string{
 	"npc_dialog":     "f9868ac59e5cc2bad6ff81b89c4c9965c74fe780c47bb372f7ebe7d1f89acd16",
 	"house_resident": "98f7fa0d049e83f59a08019caebb51d7f4b82c6d9334bbabba6979b41d692756",
 	"evt_message":    "8bb11a34baaa24f4d530482af5abe9c905cfc79c75ec7a1c7b9d0274befb56e2",
+	// M6c
+	"house_tavern":   "3c9a4468ad902dca1e71c623212102841253264487e0d10bee8746b2b696a7f4",
+	"house_temple":   "89ed9631ff611b76158336c7aebd0c8af6487a478b4665e57a4f9e4ea9e8c4d6",
+	"house_bank":     "331c87c8bb0ac5ad775289e6246d6bfbf2cceeb2b9833a663fc454b886db038e",
+	"house_stables":  "eb72e31e2745bdcc89413a5dff8035e30ae5ea087dad5ff5fb5dafe224ebc6a5",
+	"transition_d05": "949375486fc712de9eb942db19ae5d1797891d9a1ec08a6d16f1bc59c1496083",
+	"edge_out02":     "50d845ae82cc3cb1dfeee1809f4058ab8a57202ce7b50559be47d3d99b169f55",
 }
 
 var views = []view{
@@ -189,6 +197,26 @@ var views = []view{
 		d := w.Dialog()
 		d.Click(d.Buttons[0])
 	}, click: "-:31", w: 640, h: 480, hour: 9},
+	// M6c: the Grog and Grub (107), the mouse on Fill Packs.
+	{name: "house_tavern", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(107) },
+		click: "Mouse@555/210:40", w: 640, h: 480, hour: 9},
+	// M6c: Mystic Medicine (74) for a weak member: Heal for 10 gold, the mouse on it.
+	{name: "house_temple", mapName: "out01.odm", setup: func(w *World) {
+		w.S.Party.Players[0].Conditions[party.CondWeak] = 1
+		w.SpeakInHouse(74)
+	}, click: "Mouse@555/185:20", w: 640, h: 480, hour: 9},
+	// M6c: the Some Place Safe (128): Deposit, 50 typed.
+	{name: "house_bank", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(128) },
+		click: "-:2,Click@555/160:1,5:1,0:1,Mouse@300/300:20", w: 640, h: 480, hour: 9},
+	// M6c: the Ravenshore stable (54) on day 1: 2 days to Alvar.
+	{name: "house_stables", mapName: "out02.odm", setup: func(w *World) { w.SpeakInHouse(54) },
+		click: "Mouse@300/300:20", w: 640, h: 480, hour: 9},
+	// M6c: d05's exit (event 501) asks first.
+	{name: "transition_d05", mapName: "d05.blv", setup: func(w *World) { w.RunEvent(501, true) },
+		click: "Mouse@300/300:2", w: 640, h: 480},
+	// M6c: walking north off Ravenshore.
+	{name: "edge_out02", mapName: "out02.odm", party: &FreeCam{X: 0, Y: 0x5700, Z: 2000, Yaw: 512},
+		click: "Up:150,Mouse@300/300:2", w: 640, h: 480, hour: 9},
 }
 
 func TestGolden(t *testing.T) {

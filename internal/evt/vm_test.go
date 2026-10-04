@@ -27,6 +27,7 @@ type fakeHost struct {
 	houses []int
 	speak  [][2]int // npc, canShow
 	susp   []Suspension
+	trans  []Transition
 	reply  []string
 	notes  []string
 }
@@ -68,6 +69,7 @@ func (h *fakeHost) NPCs() *npc.State                    { return h.npcs }
 func (h *fakeHost) NPCChanged(op Op, id int)            { h.notes = append(h.notes, fmt.Sprint(op, id)) }
 func (h *fakeHost) SpeakInHouse(house int)              { h.houses = append(h.houses, house) }
 func (h *fakeHost) Suspend(s Suspension)                { h.susp = append(h.susp, s) }
+func (h *fakeHost) Transition(t Transition)             { h.trans = append(h.trans, t) }
 func (h *fakeHost) SpeakNPC(id int, canShow bool) {
 	c := 0
 	if canShow {
@@ -344,6 +346,43 @@ func TestMoveToMap(t *testing.T) {
 	}
 	if h.vars[0] != 1 || h.vars[1] != 1 {
 		t.Errorf("map vars %v: the event goes on and OnMapLeave runs once", h.vars[:2])
+	}
+}
+
+// TestMoveToMapAsks: a MoveToMap with a house or an exit picture opens the transition
+// dialogue instead and ends the event; it would resume at the next step.
+//
+// mm8: 0x4446bd (case 6: Evt_TransitionDialog, g_evtResumeStep = step + 1)
+func TestMoveToMapAsks(t *testing.T) {
+	move := func(house uint16, pic byte) []byte {
+		b := make([]byte, 0x1b)
+		binary.LittleEndian.PutUint32(b[0:], 100) // x
+		binary.LittleEndian.PutUint16(b[0x18:], house)
+		b[0x1a] = pic
+		return append(append(b, "d05.blv"...), 0)
+	}
+	h := newHost(1)
+	vm := &VM{Host: h, Map: script(t,
+		rec(1, 0, OpMoveToMap, move(191, 1)...),
+		rec(1, 1, OpSet, varArgs(mapVar(0), 1)...),
+		rec(2, 3, OpMoveToMap, move(0, 2)...),
+	)}
+	res := vm.Run(Source{}, 1, 0, true)
+	if res.Moved || len(h.moves) != 0 || h.vars[0] != 0 || len(h.trans) != 1 {
+		t.Fatalf("asked: %+v moves %v var %d", res, h.moves, h.vars[0])
+	}
+	tr := h.trans[0]
+	if tr.House != 191 || tr.Pic != 1 || tr.Map != "d05.blv" || tr.X != 100 || !tr.Moves() ||
+		tr.Resume != (Suspension{ID: 1, Step: 1, Op: OpMoveToMap}) {
+		t.Errorf("transition %+v", tr)
+	}
+	vm.Run(Source{}, 2, 3, true)
+	if tr := h.trans[1]; tr.House != 0 || tr.Pic != 2 || tr.Resume.Step != 4 {
+		t.Errorf("exit picture: %+v", tr)
+	}
+	vm.Resume(h.trans[0].Resume, "")
+	if h.vars[0] != 1 {
+		t.Error("resumed event did not go on")
 	}
 }
 

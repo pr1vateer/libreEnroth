@@ -81,6 +81,9 @@ type Host interface {
 	// Suspend parks the event until the player answers (PressAnyKey, InputString); the
 	// UI resumes it with VM.Resume.
 	Suspend(s Suspension)
+	// Transition asks before a MoveToMap with a house or an exit picture; the event
+	// has ended (it goes on at t.Resume only if the OK finds no position to go to).
+	Transition(t Transition)
 	// Stub is an opcode of a later milestone (op.Milestone()), or a player variable the
 	// stats do not have yet (var >= 0).
 	Stub(op Op, r Record, v Var)
@@ -97,6 +100,25 @@ type Suspension struct {
 	// line buffer g_statusTimed 0x5db694.
 	Question string
 }
+
+// Transition is a MoveToMap that asks first, in the transition dialogue: House is the
+// 2DEvents id whose clip plays (0: none), Pic the exit picture (ticon%02d), Map and the
+// position the record's (Dir -1: keep the heading).
+//
+// mm8: 0x4446bd (case 6: Evt_TransitionDialog 0x4425f5(house, pic, x, y, z, dir, pitch,
+// zSpeed, name), g_evtResumeStep = step + 1, g_evtResumeId = id; the event exits)
+type Transition struct {
+	House, Pic             int
+	Map                    string
+	X, Y, Z, Dir, Look, VZ int32
+	Resume                 Suspension
+}
+
+// Moves reports a position to go to (any value non-zero); without one the OK resumes
+// the event instead.
+//
+// mm8: 0x42f877 (msg 0x19b: 0x5a53a0..0x5a53b4 all zero)
+func (t Transition) Moves() bool { return t.X|t.Y|t.Z|t.Dir|t.Look|t.VZ != 0 }
 
 // VM runs events. Map is the current map's script (nil: none), Global global.evt.
 type VM struct {
@@ -340,7 +362,9 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 		return stay, false
 	case OpSetSnow: // an empty function in MM8 (0x450f22)
 	case OpMoveToMap:
-		r.moveToMap(rec)
+		if r.moveToMap(rec) {
+			return next, true
+		}
 	case OpShowFace:
 		pft := h.Ctx().PFT
 		r.facePlayers(rec.U8(5), func(p int) { r.m.Players[p].SetExpression(pft, rec.U8(6), 0) })
@@ -531,17 +555,22 @@ func strEqualASCII(a, b string) bool {
 }
 
 // moveToMap teleports the party on this map (name "0...") or travels to another. A
-// house picture or exit picture asks first in a dialogue (M6); libre-enroth goes
-// straight on.
+// house picture or exit picture asks first in the transition dialogue, which ends the
+// event (true).
 //
 // mm8: 0x4446bd (case 6), 0x4425f5 (transition dialogue), 0x447f80 (Evt_Travel)
-func (r *run) moveToMap(rec Record) {
+func (r *run) moveToMap(rec Record) (asked bool) {
 	x, y, z := rec.I32(5), rec.I32(9), rec.I32(0xd)
 	dir, look, vz := rec.I32(0x11), rec.I32(0x15), rec.I32(0x19)
+	name := rec.Str(0x20)
+	if house, pic := rec.U16(0x1d), rec.U8(0x1f); house != 0 || pic != 0 {
+		r.h.Transition(Transition{House: house, Pic: pic, Map: name, X: x, Y: y, Z: z, Dir: dir, Look: look, VZ: vz,
+			Resume: Suspension{Src: r.src, ID: rec.ID(), Step: rec.Step() + 1, Op: OpMoveToMap}})
+		return true
+	}
 	if dir != -1 {
 		dir &= 0x7ff
 	}
-	name := rec.Str(0x20)
 	if len(name) > 0 && name[0] == '0' {
 		if dir|vz|look|z|y|x != 0 {
 			r.h.Teleport(x, y, z, dir, look, vz)
@@ -550,6 +579,7 @@ func (r *run) moveToMap(rec Record) {
 	}
 	r.h.MoveToMap(name, x, y, z, dir, look, vz)
 	r.moved = true
+	return false
 }
 
 // MapLeave runs every OnMapLeave event of the map from the step of its trigger.

@@ -23,6 +23,10 @@ type Dialogs interface {
 	MessageBox() (text string, input, ok bool)
 	// Answer resumes the waiting event (ok false: Esc).
 	Answer(text string, ok bool)
+	// TransitionDialog is the open transition dialogue (a MoveToMap asking, a map
+	// edge), nil for none; AnswerTransition closes it with OK or Close.
+	TransitionDialog() *dialog.Transition
+	AnswerTransition(ok bool)
 }
 
 // Text colours of the dialogues (Color16 values the draw functions make).
@@ -223,6 +227,7 @@ type dialogScreen struct {
 	hover    int
 	portHits []image.Rectangle
 	msg      *messageBox
+	ticks    int
 }
 
 func newDialogScreen(r *Resources, w Dialogs, d *dialog.Dialog) (*dialogScreen, error) {
@@ -258,16 +263,21 @@ func (s *dialogScreen) portraitPos(i, count int) (int, int) {
 // mm8: 0x42f877 (msgs 0x19a, 0x88, 0xaf, 0x195, 0x71 in g_screenMode 4 and 0xd)
 func (s *dialogScreen) update(in *Input) (closed bool) {
 	d := s.d
+	s.ticks++
 	if s.video != nil {
 		s.video.tick(!d.VideoOnce)
 	}
-	s.spots = layoutTopics(s.art.arrus, d)
+	if s.updateGoldInput(in) {
+		return s.afterClick()
+	}
+	s.layout()
 	s.hover = topicAt(s.spots, in.X, in.Y)
 	if in.LeftPressed {
 		switch {
 		case s.hover >= 0:
-			d.Click(s.spots[s.hover].b)
-			if s.video != nil && d.Kind == dialog.KindHouse {
+			b := s.spots[s.hover].b
+			d.Click(b)
+			if s.video != nil && b.Msg == dialog.MsgHouseTopic {
 				s.video.rewind() // mm8: 0x4b2b74 ends with Video_Rewind
 			}
 		case d.Kind == dialog.KindHouse && d.Sel == 0 && !d.NoPortraits:
@@ -284,13 +294,36 @@ func (s *dialogScreen) update(in *Input) (closed bool) {
 			}
 		}
 	}
+	if s.afterClick() {
+		return true
+	}
+	if d.Input == nil && in.Pressed(KeyEscape) && !s.back() {
+		return true
+	}
+	return false
+}
+
+// layout lays out the buttons: the proprietor's per-type screen, else the topic column.
+func (s *dialogScreen) layout() {
+	if s.d.OnProprietor() || s.d.Type == dialog.TypePrison && s.d.Kind == dialog.KindHouse {
+		s.spots = s.servicePanel(-1).spots
+	} else {
+		s.spots = layoutTopics(s.art.arrus, s.d)
+	}
+}
+
+// afterClick takes the back steps a click asked for and reports the dialogue closing
+// (all the way back, or the house left by a service).
+func (s *dialogScreen) afterClick() (closed bool) {
+	d := s.d
+	if d.Closed {
+		s.w.CloseDialog()
+		return true
+	}
 	for d.TakeBack() {
 		if !s.back() {
 			return true
 		}
-	}
-	if in.Pressed(KeyEscape) && !s.back() {
-		return true
 	}
 	return false
 }
@@ -298,6 +331,9 @@ func (s *dialogScreen) update(in *Input) (closed bool) {
 // back is msg 0x71: one step back; false when the dialogue is over.
 func (s *dialogScreen) back() bool {
 	if s.d.Back() {
+		if s.video != nil && s.d.Kind == dialog.KindHouse {
+			s.video.rewind() // mm8: 0x4bda0e (House_Back rewinds the clip)
+		}
 		return true
 	}
 	s.w.CloseDialog()

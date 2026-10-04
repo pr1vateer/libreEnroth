@@ -21,6 +21,11 @@ type fakeHost struct {
 	auto   []int
 	reply  func(id int) string
 	d      **Dialog
+	ctx    *party.Ctx
+	loc    []byte
+	mapNow string
+	moves  []string
+	spoke  []int
 }
 
 func (h *fakeHost) Tables() *tables.All     { return h.t }
@@ -38,6 +43,8 @@ func (h *fakeHost) Global(i int) string {
 		return "%s the %s"
 	case 0x19b:
 		return "Enter %s"
+	case 0x199:
+		return "Do you wish to leave %s?"
 	}
 	return fmt.Sprintf("g%#x", i)
 }
@@ -55,9 +62,24 @@ func (h *fakeHost) CanShowTopic(id int) int {
 	return 2
 }
 func (h *fakeHost) Status(text string, _ int) { h.status = append(h.status, text) }
-func (h *fakeHost) Speak(int, int)            {}
-func (h *fakeHost) SetAutonote(n int)         { h.auto = append(h.auto, n) }
-func (h *fakeHost) Note(what string)          { h.notes = append(h.notes, what) }
+func (h *fakeHost) Speak(_, id int)           { h.spoke = append(h.spoke, id) }
+func (h *fakeHost) Ctx() *party.Ctx           { return h.ctx }
+func (h *fakeHost) Location() []byte          { return h.loc }
+func (h *fakeHost) MapName() string           { return h.mapNow }
+func (h *fakeHost) MapStatsFile(i int) string { return fmt.Sprintf("out%02d.odm", i) }
+func (h *fakeHost) MapStatsIndex(name string) int {
+	var i int
+	fmt.Sscanf(name, "out%02d.odm", &i)
+	return i
+}
+func (h *fakeHost) Teleport(x, y, z, dir, _, _ int32) {
+	h.moves = append(h.moves, fmt.Sprintf("teleport %d %d %d %d", x, y, z, dir))
+}
+func (h *fakeHost) MoveToMap(name string, x, y, z, dir, _, _ int32) {
+	h.moves = append(h.moves, fmt.Sprintf("%s %d %d %d %d", name, x, y, z, dir))
+}
+func (h *fakeHost) SetAutonote(n int) { h.auto = append(h.auto, n) }
+func (h *fakeHost) Note(what string)  { h.notes = append(h.notes, what) }
 
 func newHost() *fakeHost {
 	nt := &tables.NPCTables{
@@ -92,6 +114,7 @@ func newHost() *fakeHost {
 	return &fakeHost{
 		t:    &tables.All{Houses: houses, HouseAnims: anims, NPC: nt, Topics: &tables.Topics{Topic: topic, Text: text}, Trans: make([]string, 10)},
 		npcs: npc.New(nt), m: m, hidden: map[int]bool{},
+		ctx: &party.Ctx{Rand: party.NewRand(1)}, loc: make([]byte, 0x28), mapNow: "out02.odm",
 	}
 }
 

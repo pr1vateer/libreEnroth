@@ -452,8 +452,8 @@ func (p *Party) MoveOutdoor(g *physics.OutdoorGeo, ticks int32) {
 	}
 }
 
-// ClampToMap keeps the party within 0x5800 of the map centre; the original first offers
-// the neighbouring map (M6).
+// ClampToMap keeps the party within 0x5800 of the map centre (where no map-edge
+// dialogue opens, or it was closed).
 //
 // mm8: 0x46bb13 (World_TickOutdoor)
 func (p *Party) ClampToMap() {

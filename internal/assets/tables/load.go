@@ -21,10 +21,11 @@ type All struct {
 	Merchant   *Merchant
 	Trans      []string
 	Roster     []RosterEntry
+	Travel     *Travel
 }
 
-// Load reads the tables from the language LODs and the house clip table from
-// MM8-Rel.exe.
+// Load reads the tables from the language LODs and the house clip and travel tables
+// from MM8-Rel.exe.
 //
 // mm8: 0x4779fb (the NPC/topic/quest/autonote/award/trans/merchant loaders),
 // 0x4414e8 (Txt_Load2DEvents), 0x49680a (Txt_LoadRoster)
@@ -52,6 +53,9 @@ func Load(d *assets.Data) (*All, error) {
 	}
 	var err error
 	if a.HouseAnims, err = ReadHouseAnims(d.Exe); err != nil {
+		return nil, err
+	}
+	if a.Travel, err = ReadTravel(d.Exe); err != nil {
 		return nil, err
 	}
 	return a, nil

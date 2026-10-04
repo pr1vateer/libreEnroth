@@ -117,8 +117,10 @@ type World struct {
 	vm     *evt.VM
 	strs   []string // the map's .str
 	timers *evt.Timers
-	travel *Arrival      // a MoveToMap to another map, done after the frame
-	frame  *render.Frame // the last rendered view, for picking
+	travel *Arrival // a MoveToMap to another map, done after the frame
+	// transition is the open transition dialogue (a MoveToMap asking, a map edge).
+	transition *transition
+	frame      *render.Frame // the last rendered view, for picking
 	// MessageText and ReplyText are the map's message (g_evtMessage 0x5c678c) and the
 	// dialogue reply (0xffd350).
 	MessageText, ReplyText string
@@ -173,12 +175,19 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 		if !w.placeAtStart(a) {
 			w.placeDefault()
 		}
-		w.dropParty()
+		if a.Ground && w.outdoor != nil {
+			// mm8: 0x42f877 (msg 0x5a: z = Terrain_HeightAt(1, x, y))
+			p := w.group
+			z, _, _ := w.outdoor.geo.TerrainZ(p.X, p.Y, p.Levitate, false, false)
+			p.Teleport(p.X, p.Y, z, p.Dir)
+		} else {
+			w.dropParty()
+		}
 		s.arrival = nil
 	} else if ok {
 		w.placeDefault()
 	}
-	w.travel, w.PartyDead = nil, false
+	w.travel, w.transition, w.PartyDead = nil, nil, false
 	w.syncClock()
 	w.enter()
 	return w, nil
@@ -409,7 +418,7 @@ func (w *World) moveParty(ticks int32) {
 		w.group.MoveIndoor(w.indoor.geo, ticks)
 	case w.outdoor != nil:
 		w.group.MoveOutdoor(w.outdoor.geo, ticks)
-		w.group.ClampToMap()
+		w.tickEdge()
 	}
 }
 

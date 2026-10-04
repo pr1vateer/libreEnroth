@@ -34,7 +34,8 @@ var scriptKeys = map[string]Key{
 // ParseScript parses steps "keys:ticks" separated by commas, where keys are key names
 // joined by '+' (letters, digits, Up, Shift, PgUp, F3, '[', ...) or '-' for none:
 // "Up:120,X:1,Right+Shift:30,-:60". "Mouse@x/y" puts the mouse at UI point (x, y) for
-// the step and "Click@x/y" also clicks the left button there: "Click@320/200:2".
+// the step and "Click@x/y" also clicks the left button there: "Click@320/200:2". A
+// letter or digit key types its character too (lower case).
 func ParseScript(s string) (*Script, error) {
 	sc := &Script{}
 	for _, part := range strings.Split(s, ",") {
@@ -106,6 +107,15 @@ func (s *Script) Next(in *Input) {
 			in.Held = append(in.Held, st.keys...)
 			if t == 0 {
 				in.Keys = append(in.Keys, st.keys...)
+				for _, k := range st.keys {
+					// A letter or digit also types its character (lower case).
+					switch {
+					case k >= '0' && k <= '9':
+						in.Runes = append(in.Runes, rune(k))
+					case k >= 'A' && k <= 'Z':
+						in.Runes = append(in.Runes, rune(k)+'a'-'A')
+					}
+				}
 			}
 			if st.mouse != nil {
 				in.X, in.Y = st.mouse.X, st.mouse.Y

@@ -211,6 +211,9 @@ type Members struct {
 	Deaths    int32          // +0x74c
 	Prison    int32          // +0x754: prison terms
 	Bounty    int32          // +0x758: total bounty collected
+	// Fine is the town halls' fine (0xbb2df4, outside the Party struct); nothing in MM8
+	// sets it, the town halls only show and take it.
+	Fine int32
 	// DaysWithoutRest counts 3 AM rollovers since the last rest (+0x77e).
 	DaysWithoutRest uint8
 	QBits           Bits             // +0x77f: quest bits, 1-based, MSB first
@@ -267,7 +270,7 @@ func (m *Members) NewGame(rng *Rand) {
 	m.Time, m.LastRegen = clock.NewGame, clock.NewGame
 	m.Calendar = m.Time.Calendar()
 	m.Food, m.Gold, m.Bank = 7, 200, 0
-	m.Deaths, m.Prison, m.Bounty, m.DaysWithoutRest = 0, 0, 0, 0
+	m.Deaths, m.Prison, m.Bounty, m.Fine, m.DaysWithoutRest = 0, 0, 0, 0, 0
 	m.QBits, m.Autonotes = make(Bits, QBitBytes), make(Bits, AutonoteBytes)
 	m.ArenaWins = [4]uint8{}
 	m.Counters, m.Stamps, m.History = [10]clock.Time{}, [20]clock.Time{}, [29]clock.Time{}

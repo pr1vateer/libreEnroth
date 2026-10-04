@@ -53,6 +53,7 @@ type inGame struct {
 	rest                        *restScreen
 	dialog                      *dialogScreen
 	message                     *messageBox
+	transition                  *transitionScreen
 	scoreBG                     *gfx.Sprite
 	smallnum                    *text.Font
 }
@@ -119,7 +120,7 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 // Viewport is where the world shows through.
 // The rest screen and a house (its clip) cover it.
 func (g *inGame) Viewport() image.Rectangle {
-	if g.rest != nil || g.dialog != nil && g.dialog.video != nil {
+	if g.rest != nil || g.dialog != nil && g.dialog.video != nil || g.transition != nil && g.transition.video != nil {
 		return image.Rectangle{}
 	}
 	return Viewport
@@ -212,9 +213,25 @@ func (g *inGame) updateDialogs(in *Input) (busy bool, err error) {
 		}
 		return true, nil
 	}
+	if g.transition != nil {
+		if done, ok := g.transition.update(in); done {
+			g.transition = nil
+			w.AnswerTransition(ok)
+			if err := g.afterEvent(w); err != nil {
+				return true, err
+			}
+		}
+		return true, nil
+	}
 	if g.dialog != nil {
+		d := g.dialog.d
 		if g.dialog.update(in) {
 			g.dialog = nil
+			if d.RestInn {
+				if err := g.openInnRest(); err != nil {
+					return true, err
+				}
+			}
 		}
 		if err := g.afterEvent(w); err != nil {
 			return true, err
@@ -230,7 +247,7 @@ func (g *inGame) afterEvent(w Dialogs) error {
 	if t, ok := g.world.(Traveler); ok {
 		if name, ok := t.Travel(); ok {
 			w.CloseDialog()
-			g.dialog, g.message = nil, nil
+			g.dialog, g.message, g.transition = nil, nil, nil
 			if err := g.loadMap(name); err != nil {
 				return err
 			}
@@ -256,6 +273,15 @@ func (g *inGame) openDialogs() (bool, error) {
 		}
 		g.dialog = ds
 	}
+	if t := w.TransitionDialog(); t == nil {
+		g.transition = nil
+	} else if g.transition == nil || g.transition.t != t {
+		ts, err := newTransitionScreen(g.r, t)
+		if err != nil {
+			return false, err
+		}
+		g.transition = ts
+	}
 	if text, input, ok := w.MessageBox(); ok && g.message == nil {
 		var d *dialog.Dialog
 		if g.dialog != nil {
@@ -267,7 +293,7 @@ func (g *inGame) openDialogs() (bool, error) {
 		}
 		g.message = mb
 	}
-	return g.dialog != nil || g.message != nil, nil
+	return g.dialog != nil || g.message != nil || g.transition != nil, nil
 }
 
 // travel loads the map a MoveToMap event asked for into the view.
@@ -326,6 +352,24 @@ func (g *inGame) openRest() error {
 	if err != nil {
 		return err
 	}
+	g.rest = rs
+	return nil
+}
+
+// openInnRest is the night a tavern's room pays for (msg 0x199): the rest screen opens
+// already resting, until an hour past the next 5 AM, at no food.
+//
+// mm8: 0x42f877 (msg 0x199)
+func (g *inGame) openInnRest() error {
+	site, ok := g.world.(RestSite)
+	if !ok {
+		return nil
+	}
+	rs, err := newRestScreen(g.r, site, true)
+	if err != nil {
+		return err
+	}
+	rs.restAtInn(0)
 	g.rest = rs
 	return nil
 }
@@ -393,6 +437,9 @@ func (g *inGame) Draw(c *gfx.Canvas) {
 	}
 	if g.dialog != nil {
 		g.dialog.draw(c)
+	}
+	if g.transition != nil {
+		g.transition.draw(c)
 	}
 	if g.message != nil {
 		g.message.draw(c)

@@ -35,6 +35,20 @@ type Host interface {
 	SetAutonote(n int)
 	// Note logs something a later milestone does.
 	Note(what string)
+
+	// Ctx has the party's random generator and time hooks.
+	Ctx() *party.Ctx
+	// Location is the map's location header (+8 reputation), nil without a map.
+	Location() []byte
+	// MapName is the current map's games.lod name; MapStatsFile MapStats row i's.
+	MapName() string
+	MapStatsFile(i int) string
+	// MapStatsIndex is MapStats_Find: the row of a map file, 0 for none.
+	MapStatsIndex(name string) int
+	// Teleport moves the party on this map; MoveToMap sends it to another, arriving at
+	// its Party Start with the non-zero values replacing it.
+	Teleport(x, y, z, dir, look, vz int32)
+	MoveToMap(name string, x, y, z, dir, look, vz int32)
 }
 
 // Kind is the kind of dialogue.
@@ -109,9 +123,18 @@ type Dialog struct {
 	// VideoOnce: MoveNPC in house 553 stops the clip looping (g_video.loop = 0).
 	VideoOnce bool
 
-	keepReply bool // 0xffd344: "Party is full!" survives the back step
-	topicSlot int  // 0xffd33c: the topic button that offered a roster character
-	posted    bool // a back step (msg 0x71) is due
+	// Input is the open gold entry of the bank or the town hall, nil for none.
+	Input *GoldInput
+	// Closed is set when a click left the house (a room for the night, a journey, the
+	// exit portrait); RestInn when the inn's rest follows (msg 0x199).
+	Closed, RestInn bool
+	// Traded is set by a deposit or withdrawal (0xffd34c: the leaving sound, M11).
+	Traded bool
+
+	keepReply bool                        // 0xffd344: "Party is full!" survives the back step
+	donations [party.MaxMembers + 1]uint8 // 0xffd35c: the temple's count per member
+	topicSlot int                         // 0xffd33c: the topic button that offered a roster character
+	posted    bool                        // a back step (msg 0x71) is due
 }
 
 // Back steps (msg 0x71) a dialogue asks for after a click are collected here: the UI
@@ -149,6 +172,17 @@ func (d *Dialog) Resident() int {
 		return 0
 	}
 	return d.Residents[i]
+}
+
+// MapStatsName is MapStats row i's name.
+func (d *Dialog) MapStatsName(i int) string { return d.h.MapStatsName(i) }
+
+// TopicText is npctext.txt string i ("" when none).
+func (d *Dialog) TopicText(i int) string {
+	if t := d.h.Tables().Topics.Text; i > 0 && i < len(t) {
+		return t[i]
+	}
+	return ""
 }
 
 // ExitName is the name of the map the "Other Exits" portrait leads to.
@@ -368,7 +402,7 @@ func (d *Dialog) Click(b Button) {
 		d.service(b.Param)
 		return
 	case MsgEnterExit:
-		d.h.Note("entering through the Other Exits portrait (msg 0xbf, M6c)")
+		d.enterExit()
 		return
 	case MsgBack:
 		d.post()
@@ -508,11 +542,6 @@ func (d *Dialog) join(n *tables.NPC, yes bool) {
 	d.post()
 }
 
-// service is a proprietor's menu entry (M6c).
-func (d *Dialog) service(code int) {
-	d.h.Note(fmt.Sprintf("house service %#x of type %#x (M6c)", code, d.Type))
-}
-
 // Back is the back step (Esc, msg 0x71): from a sub-dialogue to the topics, from the
 // topics to the portraits; it returns false when the dialogue closes.
 //
@@ -521,6 +550,7 @@ func (d *Dialog) Back() bool {
 	if d.Kind == KindNPC {
 		return false
 	}
+	d.Input = nil
 	if d.keepReply {
 		d.keepReply = false
 	} else {
@@ -537,9 +567,12 @@ func (d *Dialog) Back() bool {
 		return len(d.Portraits) != 1
 	case -1:
 		d.SelectResident(d.Sel - 1)
+	case SvcArcomageRules, SvcArcomageVictory, SvcArcomagePlay:
+		d.Menu = SvcArcomage
+		d.Buttons = arcomageMenu()
 	default:
-		// The proprietors' sub-menus (shops, the bank, ...) step back to the main menu
-		// (M6c).
+		// The other sub-menus step back to the main menu (the shops' sell, identify and
+		// repair to their display, M7).
 		d.Menu = 1
 		d.Buttons = ServiceMenu(d.Type, d.h.Members())
 	}
@@ -622,7 +655,7 @@ func (d *Dialog) Text() string {
 func (d *Dialog) Label(b Button) string {
 	g := d.h.Global
 	if b.Msg == MsgService {
-		return fmt.Sprintf("service %#x", b.Param) // the proprietors' labels are M6c's
+		return "" // the proprietors' screens label their own (ui/house_services.go)
 	}
 	if b.Msg == MsgBack {
 		return g(0x22) // Cancel

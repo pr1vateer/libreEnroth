@@ -20,6 +20,22 @@ func quietSession() *Session {
 	return s
 }
 
+// global gives the session global.txt.
+func (e *env) global(t *testing.T, s *Session) {
+	t.Helper()
+	_, raw, err := e.d.LangFile("global.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := ui.ParseGlobal(raw)
+	s.Global = func(i int) string {
+		if i < 0 || i >= len(g) {
+			return ""
+		}
+		return g[i]
+	}
+}
+
 func (e *env) load(t *testing.T, name string, s *Session) *World {
 	t.Helper()
 	w, err := Load(e.d, e.tables, e.tex, name, s)
@@ -170,18 +186,32 @@ func TestOut01Timers(t *testing.T) {
 	}
 }
 
-// TestD05ToOut01: event 501 (the exit of the Abandoned Temple) moves the party to out01
+// TestD05ToOut01: event 501 (the exit of the Abandoned Temple, exit picture 1) asks "Do
+// you wish to leave Abandoned Temple?" first; Close stays, OK moves the party to out01
 // at (-12789, 18734) facing 1536; the temple keeps its state for the next visit.
 //
-// mm8: 0x4446bd (case 6), 0x447f80 (Evt_Travel), 0x44808d (Level_PlaceParty)
+// mm8: 0x4446bd (case 6), 0x4425f5 (Evt_TransitionDialog), 0x42f877 (msgs 0x19b,
+// 0x19c), 0x447f80 (Evt_Travel), 0x44808d (Level_PlaceParty)
 func TestD05ToOut01(t *testing.T) {
 	e := newEnv(t)
 	s := quietSession()
+	e.global(t, s)
 	d05 := e.load(t, "d05.blv", s)
 	d05.MapVars()[50] = 7
-	if res := d05.RunEvent(501, true); !res.Moved {
-		t.Fatal("event 501 did not move")
+	if res := d05.RunEvent(501, true); res.Moved {
+		t.Fatal("event 501 moved without asking")
 	}
+	tr := d05.TransitionDialog()
+	if tr == nil || tr.Icon != "ticon01" || tr.Video != "" || tr.Title != "Abandoned Temple" ||
+		tr.Text != "Do you wish to leave Abandoned Temple?" || tr.Topbar != "topbar" {
+		t.Fatalf("transition %+v", tr)
+	}
+	d05.AnswerTransition(false)
+	if _, ok := d05.Travel(); ok || d05.TransitionDialog() != nil {
+		t.Fatal("Close travelled or stayed open")
+	}
+	d05.RunEvent(501, true)
+	d05.AnswerTransition(true)
 	name, ok := d05.Travel()
 	if !ok || name != "out01.odm" {
 		t.Fatalf("Travel %q %v", name, ok)

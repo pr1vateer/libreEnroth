@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"libre-enroth/internal/assets/vid"
+	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
 	"libre-enroth/internal/media/smacker"
@@ -118,6 +119,14 @@ func (s *dialogScreen) drawHouse(c *gfx.Canvas) {
 	count := len(d.Portraits)
 	names := text.Rect{W: 630, H: gfx.ScreenH}
 	switch {
+	case d.Type == dialog.TypePrison && (d.Sel == 0 || d.OnProprietor()):
+		if d.Sel != 0 {
+			x, y := s.portraitPos(0, 1)
+			s.drawPortrait(c, d.Portraits[d.Sel-1].Icon, x, y)
+			t := fmt.Sprintf(s.r.GlobalText(0x1ad), d.Def.Owner, d.Def.Title)
+			a.create.DrawCentered(c, names, 0x1e3, 0x71, inkName, t, 3)
+		}
+		s.drawPrison(c)
 	case d.Sel == 0:
 		if d.Reply != "" {
 			a.drawReply(c, d.Reply, 0x1ca, 0xd, func(int) bool { return false })
@@ -148,7 +157,7 @@ func (s *dialogScreen) drawHouse(c *gfx.Canvas) {
 		if d.OnProprietor() {
 			t := fmt.Sprintf(s.r.GlobalText(0x1ad), d.Def.Owner, d.Def.Title)
 			a.create.DrawCentered(c, names, 0x1e3, 0x71, inkName, t, 3)
-			drawTopics(c, a.arrus, s.spots, s.hover) // the services: M6c draws them per type
+			s.servicePanel(s.hover).draw(c, s.hover)
 		} else {
 			s.drawResident(c)
 		}

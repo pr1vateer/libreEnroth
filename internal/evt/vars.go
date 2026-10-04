@@ -357,13 +357,7 @@ func (r *run) sub(p int, v Var, value uint32) {
 // takeGold takes up to n gold.
 //
 // mm8: 0x4931e5 (Party_TakeGold)
-func (r *run) takeGold(n uint32) {
-	if uint32(r.m.Gold) < n {
-		r.m.Gold = 0
-		return
-	}
-	r.m.Gold -= int32(n)
-}
+func (r *run) takeGold(n uint32) { r.m.TakeGold(n) }
 
 // set is Set for member p (nothing outside the party). Conditions set this way can be
 // blocked.

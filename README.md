@@ -5,12 +5,13 @@ A reimplementation of the *Might and Magic VIII: Day of the Destroyer* engine in
 from your own copy of the game (for example the GOG release). No game data is included in this
 repository.
 
-Status: milestone M3. You get the title screen, credits, character creation and the in-game
-screen, which shows the 3D world. Every outdoor (`.odm`) and indoor (`.blv`) map can be viewed
-with a free-flying camera, drawn by a software renderer that reproduces the original's Direct3D
-look: hardware textures, sun, distance shading, torch and coloured lights, the sky, decorations
-and doors. Weather fog is not drawn yet.
-The party does not walk, collide or interact yet (M4+). "New Game" → OK starts on `out01.odm`.
+Status: milestone M6. You get the title screen, credits, character creation and the in-game
+screen. The party walks, jumps and flies through every outdoor (`.odm`) and indoor (`.blv`) map,
+drawn by a software renderer that reproduces the original's Direct3D look. Time passes, the
+party rests, and the map scripts run: doors, clicks, NPC dialogues and houses with their clips.
+Taverns, temples, banks, stables and boats work, as do dungeon entrances and walking off the
+edge of a map to the next one. Items, skills and stats (shops, training), monsters, combat,
+spells, saving and sound are later milestones. "New Game" → OK starts on `out01.odm`.
 See `PLAN.md` in the parent repository for the roadmap.
 
 ## Requirements

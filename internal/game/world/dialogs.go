@@ -44,6 +44,17 @@ func (w *World) MapStatsName(i int) string {
 	return ""
 }
 
+// MapStatsFile implements dialog.Host: MapStats.txt row i's map file.
+func (w *World) MapStatsFile(i int) string {
+	if row := w.statsRow(i); len(row) > 2 {
+		return strings.TrimSpace(row[2])
+	}
+	return ""
+}
+
+// MapStatsIndex implements dialog.Host (MapStats_Find).
+func (w *World) MapStatsIndex(name string) int { return w.tables.MapIndex(name) }
+
 // RunTopic implements dialog.Host: a dialogue's topic runs its global.evt event with
 // source 1.
 //

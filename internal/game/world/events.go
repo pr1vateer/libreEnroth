@@ -727,19 +727,29 @@ func (w *World) Stub(op evt.Op, r evt.Record, v evt.Var) {
 type Arrival struct {
 	Map                    string
 	X, Y, Z, Dir, Look, VZ int32
+	// Start picks the marker: 0 "Party Start", 1..4 the North/South/East/West Start a
+	// map edge arrives at (edgeStarts).
+	Start int
+	// Ground puts the party on the terrain (a map edge) rather than on the floor under
+	// it.
+	Ground bool
 }
 
-// placeAtStart puts the party on the "Party Start" marker (heading from its degrees,
-// or its yaw when set), then applies an arrival's non-zero values. It reports whether
-// the map has the marker.
+// placeAtStart puts the party on the arrival's marker ("Party Start" unless it says
+// another; heading from its degrees, or its yaw when set), then applies the arrival's
+// non-zero values. It reports whether the map has the marker.
 //
 // mm8: 0x44808d (Level_PlaceParty)
 func (w *World) placeAtStart(a *Arrival) bool {
 	p := w.group
 	found := false
+	marker := edgeStarts[0]
+	if a != nil && a.Start > 0 && a.Start < len(edgeStarts) {
+		marker = edgeStarts[a.Start]
+	}
 	for i := range w.numDecorations() {
 		d := w.decoration(i)
-		if !strings.EqualFold(d.name, "Party Start") {
+		if !strings.EqualFold(d.name, marker) {
 			continue
 		}
 		dir := int32(d.degrees) * 512 / 90
