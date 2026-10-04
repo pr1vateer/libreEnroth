@@ -21,7 +21,16 @@ jobs:
       with:
         go-version: '1.27'
 
+    - name: Install Ebitengine dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libc6-dev libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config
+
     - name: Build
       run: go build -v ./...
+
+    # Tests that need the game files skip themselves while MM8_DATA is unset.
+    - name: Test
+      run: go test -v ./...
 
 
