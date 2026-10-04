@@ -1,6 +1,9 @@
 package party
 
-import "libre-enroth/internal/assets/desc"
+import (
+	"libre-enroth/internal/assets/desc"
+	"libre-enroth/internal/game/clock"
+)
 
 // Condition indexes Player.Conditions.
 type Condition int
@@ -65,6 +68,7 @@ type Player struct {
 	Voice      int                  // +0x1be4
 	Conditions [numConditions]int64 // +0x000: game time each began, 0 = not set
 	Recovery   int                  // +0x1bf2: ticks until the player can act again
+	HP, SP     int32                // +0x1bf8, +0x1bfc: set by the stats (M7)
 	Expr       uint16               // +0x1c86: dpft.bin expression
 	ExprTime   uint16               // +0x1c88: ticks into it
 	ExprLen    uint16               // +0x1c8a: when it ends
@@ -190,18 +194,80 @@ func (p *Player) Portrait(pft desc.PFT, ticks int, rng *Rand) int {
 // MaxMembers is the party size (g_partyCount at most 5).
 const MaxMembers = 5
 
-// Members are the party's characters and the selected one.
+// Members are the party's characters, the selected one and the party-wide state of
+// the original's Party struct (g_party 0xb20d90) that is not about movement.
 type Members struct {
 	Players  []Player
 	Selected int // 1-based, 0 = none (g_selectedPlayer 0x5192a0)
+
+	Time      clock.Time     // +0x2c: game time
+	LastRegen clock.Time     // +0x34: when Party_Regen last ran
+	Calendar  clock.Calendar // +0x71c..+0x734: derived from Time by UpdateTime
+	Food      int32          // +0x738
+	Gold      int32          // +0x744
+	Bank      int32          // +0x748
+	Deaths    int32          // +0x74c
+	Prison    int32          // +0x754: prison terms
+	Bounty    int32          // +0x758: total bounty collected
+	// DaysWithoutRest counts 3 AM rollovers since the last rest (+0x77e).
+	DaysWithoutRest uint8
+	QBits           Bits                  // +0x77f: quest bits, 1-based, MSB first
+	ArenaWins       [4]uint8              // +0x7d0
+	Autonotes       Bits                  // +0x818
+	Counters        [10]clock.Time        // +0x4ec: event counters 0xf7..0x100
+	Stamps          [20]clock.Time        // +0x624: event timestamps 0x101..0x114
+	History         [29]clock.Time        // +0x53c: history entries 0x116..0x132
+	TurnBased       bool                  // +0x898
+	Resting         bool                  // the rest screen is open (g_screenMode 5)
+	visited         [MaxMembers]bool      // 0xbb2ff8: NextSelectable's round robin
+	InParty         func(roster int) bool // event var 0x13e (M6 roster); nil = none
+}
+
+// Quest and autonote bit array sizes (Party +0x77f..+0x7cf, +0x818..+0x897).
+const (
+	QBitBytes     = 0x51
+	AutonoteBytes = 0x80
+)
+
+// Bits is a 1-based bit array, most significant bit first, like the quest bits.
+//
+// mm8: 0x44836d (bit test), 0x448394 (bit set)
+type Bits []byte
+
+// Get reports bit n (1-based); out of range bits are clear.
+func (b Bits) Get(n int) bool {
+	n--
+	return n >= 0 && n/8 < len(b) && b[n/8]&(0x80>>(n%8)) != 0
+}
+
+// Set sets or clears bit n (1-based); out of range bits are ignored.
+func (b Bits) Set(n int, on bool) {
+	n--
+	if n < 0 || n/8 >= len(b) {
+		return
+	}
+	if on {
+		b[n/8] |= 0x80 >> (n % 8)
+	} else {
+		b[n/8] &^= 0x80 >> (n % 8)
+	}
 }
 
 // NewGame resets the members for a new game: the first one is selected, conditions and
-// recovery are cleared and every face starts on the normal expression.
+// recovery are cleared and every face starts on the normal expression. The clock
+// starts at 9:00 AM on day 1, with 7 food and 200 gold.
 //
 // mm8: 0x49228d (Party_InitNewGame)
 func (m *Members) NewGame(rng *Rand) {
 	m.Selected = 1
+	m.Time, m.LastRegen = clock.NewGame, clock.NewGame
+	m.Calendar = m.Time.Calendar()
+	m.Food, m.Gold, m.Bank = 7, 200, 0
+	m.Deaths, m.Prison, m.Bounty, m.DaysWithoutRest = 0, 0, 0, 0
+	m.QBits, m.Autonotes = make(Bits, QBitBytes), make(Bits, AutonoteBytes)
+	m.ArenaWins = [4]uint8{}
+	m.Counters, m.Stamps, m.History = [10]clock.Time{}, [20]clock.Time{}, [29]clock.Time{}
+	m.TurnBased, m.Resting = false, false
 	for i := range m.Players {
 		p := &m.Players[i]
 		p.Recovery = 0

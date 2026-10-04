@@ -79,7 +79,14 @@ type World struct {
 	FreeCamOn bool
 	// AlwaysRun is the KEY_ALWAYSRUN toggle (U).
 	AlwaysRun bool
-	Clock     Clock
+	// Clock is the time of day the view is lit for and the animation clock; Update
+	// sets the hour and minute from the session's calendar.
+	Clock Clock
+	// S is the session: the party members, their clock and the RNG.
+	S *Session
+	// PartyDead is set when the clock finds nobody able to act (g_partyCreateResult 8;
+	// what follows is M7/M8).
+	PartyDead bool
 
 	group    *party.Party
 	name     string
@@ -94,8 +101,12 @@ type World struct {
 
 var _ ui.World = (*World)(nil)
 
-// Load opens a map from games.lod, with its .ddm/.dlv template for indoor maps.
-func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string) (*World, error) {
+// Load opens a map from games.lod, with its .ddm/.dlv template, into session s (nil:
+// a new session with a one-member party).
+func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Session) (*World, error) {
+	if s == nil {
+		s = NewSession()
+	}
 	raw, err := d.Games.Raw(name)
 	if err != nil {
 		return nil, err
@@ -104,7 +115,8 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string) (*Worl
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	w := &World{name: name, tex: tex, tables: tables, Clock: Clock{Hour: 9}}
+	w := &World{name: name, tex: tex, tables: tables, S: s}
+	w.syncClock()
 	// The map's state file: .ddm outdoors, .dlv indoors (games.lod has the new-game
 	// templates; saves are M10).
 	state := func(ext string) ([]byte, error) {
@@ -185,14 +197,24 @@ func (w *World) PartyState() *party.Party { return w.group }
 // Indoor is the loaded indoor map, nil outdoors.
 func (w *World) Indoor() *Indoor { return w.indoor }
 
-// Update implements ui.World: one 60 Hz tick of input, party movement, doors and the
-// clock. Debug keys: F2 opens/closes every door indoors, F3 toggles the free camera
-// (leaving it puts the party where the camera is), F4 the fly buff, F5 water walking.
+// Update implements ui.World: one 60 Hz tick of the game loop: the clock (stopped in
+// turn-based mode), input, party movement and doors. Debug keys: F2 opens/closes
+// every door indoors, F3 toggles the free camera (leaving it puts the party where the
+// camera is), F4 the fly buff, F5 water walking.
+//
+// mm8: 0x46261d (Game_Loop: Timer_Update, Party_UpdateTime unless the timer is paused
+// or stopped, then World_Tick)
 func (w *World) Update(in *ui.Input) {
 	w.subTicks += TicksPerSecond
 	ticks := w.subTicks / 60
 	w.Clock.Ticks += ticks
 	w.subTicks %= 60
+	if m := w.S.Party; !m.TurnBased {
+		if m.UpdateTime(ticks, w.S.Ctx) {
+			w.PartyDead = true
+		}
+	}
+	w.syncClock()
 	if in.Pressed(ui.KeyF3) {
 		w.FreeCamOn = !w.FreeCamOn
 		if w.FreeCamOn {
@@ -220,6 +242,12 @@ func (w *World) Update(in *ui.Input) {
 		}
 		w.indoor.UpdateDoors(ticks)
 	}
+}
+
+// syncClock lights the view for the calendar's time of day.
+func (w *World) syncClock() {
+	c := w.S.Party.Calendar
+	w.Clock.Hour, w.Clock.Minute = c.Hour, c.Minute
 }
 
 // keyBindings are the original's default keys (KeyConfig_Load 0x458da9 with no KEY_*

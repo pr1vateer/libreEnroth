@@ -47,7 +47,7 @@ func main() {
 		mouseFlag  = flag.String("mouse", "", "pin the mouse at UI position x,y (for screenshots)")
 		mapFlag    = flag.String("map", "", "start in game on this games.lod map (e.g. out01.odm, d05.blv); implies -state ingame")
 		camFlag    = flag.String("cam", "", "start position x,y,z,yaw,pitch (z of the feet, dropped to the floor for the party; angles in 2048ths of a turn)")
-		timeFlag   = flag.String("time", "9:00", "time of day HH:MM for the lighting")
+		timeFlag   = flag.String("time", "9:00", "game time of day HH:MM on the first day")
 		inputFlag  = flag.String("input", "", "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60")
 		freeCam    = flag.Bool("freecam", false, "start with the free camera (F3) instead of the party")
 		partyFlag  = flag.String("party", "", "debug party: 1-5 portrait faces 0-27 (as in party creation), e.g. 0,5,12; a created hero replaces the first")
@@ -139,12 +139,19 @@ func main() {
 	if *screenshot == "" {
 		resources.Rand = party.NewRand(uint32(time.Now().UnixMilli()))
 	}
+	var sess *world.Session
 	resources.LoadWorld = func(name string) (ui.World, error) {
-		w, err := world.Load(data, tables, tex, name)
+		if sess == nil {
+			var err error
+			if sess, err = world.UISession(resources); err != nil {
+				return nil, err
+			}
+			sess.SetTimeOfDay(hour, minute) // -time: the hour of the first day
+		}
+		w, err := world.Load(data, tables, tex, name, sess)
 		if err != nil {
 			return nil, err
 		}
-		w.Clock.Hour, w.Clock.Minute = hour, minute
 		w.FreeCamOn = *freeCam
 		if cam != nil {
 			w.Cam = *cam

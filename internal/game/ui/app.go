@@ -49,6 +49,7 @@ type Transition struct {
 	to   State
 	set  bool
 	quit bool
+	err  error
 }
 
 func goTo(s State) Transition { return Transition{to: s, set: true} }
@@ -121,6 +122,8 @@ func (a *App) Update(in *Input) (quit bool, err error) {
 	a.mx, a.my = in.X, in.Y
 	t := a.screen.Update(in)
 	switch {
+	case t.err != nil:
+		return false, t.err
 	case t.quit:
 		return true, nil
 	case t.set:

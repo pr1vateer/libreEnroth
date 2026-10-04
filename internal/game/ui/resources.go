@@ -27,6 +27,9 @@ type Resources struct {
 	Party *party.Members
 	// Rand is the game's rand(); NewResources seeds it like the MSVC runtime (1).
 	Rand *party.Rand
+	// Status is the status line above the portraits.
+	Status *Status
+	ctx    *party.Ctx
 
 	// LoadWorld loads a map for the in-game screen; nil leaves the viewport empty.
 	LoadWorld func(name string) (World, error)
@@ -40,9 +43,43 @@ type Resources struct {
 func NewResources(d *assets.Data) *Resources {
 	return &Resources{
 		Cache: gfx.NewCache(d), Exe: d.Exe, fonts: map[string]*text.Font{}, StartMap: "out01.odm",
-		Party: &party.Members{Players: []party.Player{{}}},
-		Rand:  party.NewRand(1),
+		Party:  &party.Members{Players: []party.Player{{}}},
+		Rand:   party.NewRand(1),
+		Status: &Status{},
 	}
+}
+
+// vaSpeech is the members' speech table (Player_Speak 0x4949b1).
+const vaSpeech = 0x4ff670
+
+// Ctx is what the members' time and condition code needs: the expression table, the
+// speech table from MM8-Rel.exe and the current Rand. Hooks stay nil (NoTimeHooks)
+// until the milestones that own them.
+func (r *Resources) Ctx() (*party.Ctx, error) {
+	if r.ctx == nil {
+		pft, err := r.PFT()
+		if err != nil {
+			return nil, err
+		}
+		l := &loader{r: r}
+		raw := l.exeBytes(vaSpeech, 8*party.SpeechEntries)
+		if l.err != nil {
+			return nil, l.err
+		}
+		sp := make(party.Speech, party.SpeechEntries)
+		for i := range sp {
+			copy(sp[i][:], raw[8*i:])
+		}
+		r.ctx = &party.Ctx{PFT: pft, Speech: sp}
+	}
+	r.ctx.Rand = r.Rand
+	return r.ctx, nil
+}
+
+// GlobalText is Global without the error ("" when global.txt cannot be read).
+func (r *Resources) GlobalText(i int) string {
+	s, _ := r.Global(i)
+	return s
 }
 
 // PFT is the portrait expression table, dpft.bin.

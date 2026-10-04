@@ -80,6 +80,9 @@ var screenHashes = map[string]string{
 	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
 	"ingame":             "c4ced0148d3735d0e1de2e009ad4cc9c805531957cf1a85c29fb90794b03e488",
 	"ingame_party5_sel3": "7883b1e3c792b3d6fb68de26624611f3b5958bc55e2b0d39de002be385e90795",
+	// rest_test.go
+	"rest_open":  "994896d6b406f9ab0509ef642000266cf883b89142a9a2fe1bbef07c4dec2236",
+	"hover_time": "1a96753cc74511868a3fa65bd4dc4143a38e04bad14d7b8a0cfeef1392dd8e2e",
 }
 
 func TestScreens(t *testing.T) {

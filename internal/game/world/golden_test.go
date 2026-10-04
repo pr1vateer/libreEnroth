@@ -45,7 +45,16 @@ func (e *env) app(t testing.TB, mapName string) *ui.App {
 	t.Helper()
 	r := ui.NewResources(e.d)
 	r.StartMap = mapName
-	r.LoadWorld = func(name string) (ui.World, error) { return Load(e.d, e.tables, e.tex, name) }
+	var sess *Session
+	r.LoadWorld = func(name string) (ui.World, error) {
+		if sess == nil {
+			var err error
+			if sess, err = UISession(r); err != nil {
+				return nil, err
+			}
+		}
+		return Load(e.d, e.tables, e.tex, name, sess)
+	}
 	a, err := ui.NewApp(r, ui.StateInGame)
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +214,7 @@ func TestGolden(t *testing.T) {
 func BenchmarkFrame(b *testing.B) {
 	e := newEnv(b)
 	for _, name := range []string{"out01.odm", "d16.blv"} {
-		w, err := Load(e.d, e.tables, e.tex, name)
+		w, err := Load(e.d, e.tables, e.tex, name, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -33,7 +33,7 @@ func TestPartySpawn(t *testing.T) {
 		{"d28.blv", 0, -448, 1, 1},
 		{"out01.odm", 3766, 7649, 544, 0},
 	} {
-		w, err := Load(e.d, e.tables, e.tex, c.name)
+		w, err := Load(e.d, e.tables, e.tex, c.name, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestD28Walks(t *testing.T) {
 		{1536, 0, -1432, 1},
 		{128, 762, -345, 73}, // the stairs
 	} {
-		w, err := Load(e.d, e.tables, e.tex, "d28.blv")
+		w, err := Load(e.d, e.tables, e.tex, "d28.blv", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestOut01Water(t *testing.T) {
 		{"levitate", -1612, 20, 0, -1, true},
 		{"jump", -1606, -59, party.FlagWater, 10, true},
 	} {
-		w, err := Load(e.d, e.tables, e.tex, "out01.odm")
+		w, err := Load(e.d, e.tables, e.tex, "out01.odm", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
