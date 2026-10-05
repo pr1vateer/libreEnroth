@@ -1,15 +1,97 @@
 package party
 
-import "libre-enroth/internal/assets/tables"
+import (
+	"strings"
 
-// NewRoster makes the roster characters from roster.txt (Txt_LoadRoster 0x49680a): name,
-// class, face and voice so far; the stats, skills and items are M7's.
-func NewRoster(entries []tables.RosterEntry) []Player {
+	"libre-enroth/internal/assets/tables"
+	"libre-enroth/internal/assets/txt"
+	"libre-enroth/internal/game/items"
+)
+
+// NewRoster makes the roster characters from roster.txt: name, class, face, voice,
+// birth year, experience and level, the base stats, resistances, skill points, skills
+// (a B/E/M/G column and a level column each), the number of spells known per school
+// (at most 11), the spell book page and the equipment. An equipment cell is id + 1000 *
+// level: the generator makes an item of the id's equip type at that level (at least
+// 1, a bonus forced) for its enchantment, which then takes the id; it is identified
+// and worn when the character has its skill (or it needs none) and the slot is free,
+// else packed. HP and SP start full. Without c's tables only the names, classes,
+// faces and voices are filled.
+//
+// mm8: 0x49680a (Txt_LoadRoster)
+func NewRoster(entries []tables.RosterEntry, c *Ctx, found *[items.NumArtifacts]bool) []Player {
 	out := make([]Player, len(entries))
-	for i, e := range entries {
-		out[i] = Player{Name: e.Name, Class: e.Class, Face: int(e.Face), Voice: int(e.Voice), RosterID: i, Expr: ExprNormal}
+	for i, en := range entries {
+		p := &out[i]
+		*p = Player{Name: en.Name, Class: en.Class, Face: int(en.Face), Voice: int(en.Voice), RosterID: i, Expr: ExprNormal}
+		if c == nil || c.Items == nil || c.Classes == nil {
+			continue
+		}
+		p.rosterStats(en, c, found)
 	}
 	return out
+}
+
+// rosterStats fills a roster character's stats from its row's cells.
+//
+// mm8: 0x49680a (Txt_LoadRoster)
+func (p *Player) rosterStats(en tables.RosterEntry, c *Ctx, found *[items.NumArtifacts]bool) {
+	cell := func(k int) string {
+		if k < len(en.Cells) {
+			return en.Cells[k]
+		}
+		return ""
+	}
+	atoi := func(k int) int32 { return txt.Atoi(cell(k)) }
+	p.BirthYear, p.Exp, p.LevelBase = en.Birth, en.Experience, int16(en.Level)
+	for k := range p.Stats { // cells 8..14 in struct order: Speed (12) before Accuracy (13)
+		p.Stats[k].Base = int16(atoi(8 + k))
+	}
+	for k, r := range [...]int{DamageFire, DamageAir, DamageWater, DamageEarth, DamageMind, DamageBody} {
+		p.Resists[r] = uint16(atoi(15 + k))
+	}
+	p.SkillPoints = atoi(21)
+	for s := 0; s < NumSkills; s++ {
+		var m uint16
+		switch k := 22 + 2*s; {
+		case strings.EqualFold(cell(k), "G"):
+			m = SkillGM
+		case strings.EqualFold(cell(k), "M"):
+			m = SkillMaster
+		case strings.EqualFold(cell(k), "E"):
+			m = SkillExpert
+		}
+		p.Skills[s] = m | uint16(atoi(23+2*s))
+	}
+	for school := 0; school < 12; school++ {
+		n := min(int(atoi(100+school)), 11)
+		for k := 0; k < n; k++ {
+			p.Spells[school*spellsPerSchool+k] = true
+		}
+	}
+	for s := 0; s < 12; s++ {
+		if p.Skills[SkillFire+s] != 0 {
+			p.SpellPage = uint8(s)
+			break
+		}
+	}
+	for k := 113; k < 123; k++ {
+		v := atoi(k)
+		id := v % 1000
+		if id <= 0 {
+			continue
+		}
+		lvl := max(int(v/1000), 1)
+		d := c.Items.Item(id)
+		it := items.Generate(c.Items, lvl, int(d.EquipType)+1, true, c.Rand, found)
+		it.Flags |= items.FlagIdentified
+		it.Number = id
+		if d.Skill != tables.SkillMisc && p.SkillAt(int(d.Skill)) == 0 || !p.EquipItem(c.Items, c.Classes, it) {
+			p.AddItem(c.Items, -1, it)
+		}
+	}
+	e := &Env{Items: c.Items, Classes: c.Classes}
+	p.HP, p.SP = p.MaxHP(e), p.MaxSP(e)
 }
 
 // RosterSlot is the party slot of roster character id, -1 when not in the party.

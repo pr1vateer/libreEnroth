@@ -8,6 +8,7 @@ import (
 	"libre-enroth/internal/assets"
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/assets/exe"
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/assets/txt"
 	"libre-enroth/internal/assets/vid"
 	"libre-enroth/internal/game/party"
@@ -35,6 +36,8 @@ type Resources struct {
 
 	// LoadWorld loads a map for the in-game screen; nil leaves the viewport empty.
 	LoadWorld func(name string) (World, error)
+	items     *tables.Items
+	classes   *tables.Classes
 	dialogArt *dialogArt
 	vids      vid.Set
 	vidErr    error
@@ -59,8 +62,8 @@ func NewResources(d *assets.Data) *Resources {
 const vaSpeech = 0x4ff670
 
 // Ctx is what the members' time and condition code needs: the expression table, the
-// speech table from MM8-Rel.exe and the current Rand. Hooks stay nil (NoTimeHooks)
-// until the milestones that own them.
+// speech table from MM8-Rel.exe and the current Rand. The item and class tables
+// feed the stats, and the hooks are party.StatHooks (HP and spell points).
 func (r *Resources) Ctx() (*party.Ctx, error) {
 	if r.ctx == nil {
 		pft, err := r.PFT()
@@ -76,7 +79,16 @@ func (r *Resources) Ctx() (*party.Ctx, error) {
 		for i := range sp {
 			copy(sp[i][:], raw[8*i:])
 		}
-		r.ctx = &party.Ctx{PFT: pft, Speech: sp}
+		items, err := r.Items()
+		if err != nil {
+			return nil, err
+		}
+		cls, err := r.Classes()
+		if err != nil {
+			return nil, err
+		}
+		r.ctx = &party.Ctx{PFT: pft, Speech: sp, Items: items, Classes: cls}
+		r.ctx.Hooks = party.StatHooks{M: r.Party, C: r.ctx}
 	}
 	r.ctx.Rand = r.Rand
 	return r.ctx, nil
@@ -255,4 +267,46 @@ func (l *loader) exeStrings(va uint32, n int) []string {
 // mm8: 0x4c4cdc (GuiButton_SetIcons)
 func (l *loader) button(x, y int, msg Msg, up, dn, ht string, fromLangD bool) *Button {
 	return NewButton(x, y, msg, l.icon(up, fromLangD), l.icon(dn, fromLangD), l.icon(ht, fromLangD))
+}
+
+// Items is the items table (items.txt and the bonus tables, with the item sizes).
+//
+// mm8: 0x455a6e (Txt_LoadItemsClassesSkills)
+func (r *Resources) Items() (*tables.Items, error) {
+	if r.items == nil {
+		d := r.Cache.Data()
+		if d == nil {
+			return nil, fmt.Errorf("items: no game data")
+		}
+		t, err := tables.LoadItems(d)
+		if err != nil {
+			return nil, err
+		}
+		r.items = t
+	}
+	return r.items, nil
+}
+
+// Classes are the class and stat tables of MM8-Rel.exe.
+func (r *Resources) Classes() (*tables.Classes, error) {
+	if r.classes == nil {
+		if r.Exe == nil {
+			return nil, fmt.Errorf("classes: MM8-Rel.exe not opened")
+		}
+		c, err := tables.ReadClasses(r.Exe)
+		if err != nil {
+			return nil, err
+		}
+		r.classes = c
+	}
+	return r.classes, nil
+}
+
+func (l *loader) classes() *tables.Classes {
+	c, err := l.r.Classes()
+	l.fail(err)
+	if c == nil {
+		c = &tables.Classes{}
+	}
+	return c
 }

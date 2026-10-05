@@ -97,7 +97,17 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 	g.ct.Add(zoomIn)
 	g.ct.Add(zoomOut)
 	// A new game: Party_InitNewGame runs before the HUD is built. Loading a saved game
-	// (M10) will skip it.
+	// (M10) will skip it. Members that skipped the creation screen (the debug party)
+	// get their class's stats and skills first.
+	if ctx, err := r.Ctx(); err == nil {
+		for i := range r.Party.Players {
+			if r.Party.Players[i].LevelBase == 0 {
+				r.Party.DefaultMember(i, ctx)
+			}
+		}
+	} else {
+		l.fail(err)
+	}
 	r.Party.NewGame(r.Rand)
 	g.portraits = newPortraits(l, &g.ct) // the last child (GuiGame_Build)
 	if l.err == nil && r.LoadWorld != nil && mapName != "" {

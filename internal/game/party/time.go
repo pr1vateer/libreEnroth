@@ -2,6 +2,7 @@ package party
 
 import (
 	"libre-enroth/internal/assets/desc"
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/game/clock"
 )
 
@@ -64,6 +65,9 @@ type Ctx struct {
 	Speech Speech
 	Rand   *Rand
 	Hooks  TimeHooks
+	// Items and Classes are the tables the stat formulas read (Env).
+	Items   *tables.Items
+	Classes *tables.Classes
 }
 
 // TimeHooks returns the hooks in use (NoTimeHooks when none are set).

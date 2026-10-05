@@ -260,12 +260,11 @@ func (s *restScreen) close(ticks int) {
 	s.closed = true
 }
 
-// anyAlive reports a member who is neither dead nor eradicated (the original also
-// wants HP above 0, which waits for the stats, M7).
+// anyAlive reports a member who is neither dead nor eradicated and has HP above 0.
 func anyAlive(m *party.Members) bool {
 	for i := range m.Players {
 		p := &m.Players[i]
-		if p.Conditions[party.CondDead] == 0 && p.Conditions[party.CondEradicated] == 0 {
+		if p.Conditions[party.CondDead] == 0 && p.Conditions[party.CondEradicated] == 0 && p.HP > 0 {
 			return true
 		}
 	}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/game/party"
@@ -31,6 +32,21 @@ const (
 // mm8: 0x4ff9e0 (g_portraitX)
 var portraitX = [party.MaxMembers]int{19, 118, 213, 308, 405}
 
+// The bars' tables: the x of the HP and SP bars per slot (a bar starts one pixel
+// right of it), and the manafrm frames over them.
+//
+// mm8: 0x41b67a (Portraits_DrawBars), 0x4ca371 (GuiPortraits_Draw)
+const (
+	vaHPBarX = 0x4f59a4
+	vaSPBarX = 0x4f59b8
+	barY     = 0x1ae
+	manafrmY = 0x1ad
+)
+
+// manafrmX is where the frames go (GuiPortraits_Draw's switch: the HP bar tables'
+// values).
+var manafrmX = [party.MaxMembers]int{0x54, 0xb5, 0x115, 0x175, 0x1d4}
+
 // shieldX is where IBshield01..04 cover empty slots 2..5.
 //
 // mm8: 0x4ca371 (GuiPortraits_Draw)
@@ -48,6 +64,12 @@ type portraits struct {
 	selring *gfx.Sprite
 	shields [4]*gfx.Sprite
 	slots   [party.MaxMembers]*Hotspot
+	// The HP and SP bars: the frame, the green, yellow and red HP and the blue SP
+	// pictures, and their x per slot.
+	manafrm                *gfx.Sprite
+	barG, barY, barR, barB *gfx.Sprite
+	hpBarX, spBarX         []int32
+	ctx                    *party.Ctx
 
 	shown    []int // per member: the party.Player.Portrait result to draw
 	subTicks int
@@ -69,9 +91,16 @@ func newPortraits(l *loader, ct *Container) *portraits {
 	for i := range p.shields {
 		p.shields[i] = l.icon(fmt.Sprintf("IBshield%02d", i+1), false)
 	}
-	pft, err := r.PFT()
+	p.manafrm = l.icon("manafrm", false)
+	p.barG, p.barY, p.barR, p.barB = l.icon("manaG", false), l.icon("manaY", false), l.icon("manaR", false), l.icon("manaB", false)
+	p.hpBarX = l.exeInts(vaHPBarX, party.MaxMembers)
+	p.spBarX = l.exeInts(vaSPBarX, party.MaxMembers)
+	ctx, err := r.Ctx()
 	l.fail(err)
-	p.pft = pft
+	p.ctx = ctx
+	if ctx != nil {
+		p.pft = ctx.PFT
+	}
 	prefixes := l.exeStrings(vaPortraitNames, numFaces)
 	for _, pl := range p.m.Players {
 		var f [portraitFrames]*gfx.Sprite
@@ -121,9 +150,9 @@ func (p *portraits) update() {
 	p.m.TickExpressions(p.pft, ticks, p.rng)
 }
 
-// draw draws the faces, the ring around the selected member and the shields over the
-// empty slots. The ready gem, buff icon, mana frames and HP/SP bars come with the
-// stats (M7).
+// draw draws the faces, the ring around the selected member, the bars' frames, the
+// shields over the empty slots and the HP and SP bars. The ready gem (0x4ca970) and the
+// buff icon are M8's and M9's.
 //
 // mm8: 0x4ca371 (GuiPortraits_Draw)
 func (p *portraits) draw(c *gfx.Canvas) {
@@ -140,9 +169,51 @@ func (p *portraits) draw(c *gfx.Canvas) {
 	if s := p.m.Selected; s >= 1 && s <= party.MaxMembers {
 		c.BlitKeyed(p.selring, portraitX[s-1], portraitY)
 	}
+	for i := range p.m.Players {
+		c.BlitKeyed(p.manafrm, manafrmX[i], manafrmY)
+	}
 	for slot := len(p.m.Players) + 1; slot <= party.MaxMembers; slot++ {
 		if slot >= 2 {
 			c.BlitKeyed(p.shields[slot-2], shieldX[slot-2], shieldY)
+		}
+	}
+	p.drawBars(c)
+}
+
+// drawBars draws each member's HP bar (green above half, yellow above a quarter, red
+// above 0) and SP bar (blue), showing the bottom part of the picture for the share of
+// the maximum: the clip starts ftol((1 - share) * h) below the top, h being manaG's
+// height for every bar.
+//
+// mm8: 0x41b67a (Portraits_DrawBars)
+func (p *portraits) drawBars(c *gfx.Canvas) {
+	if p.ctx == nil {
+		return
+	}
+	e := p.m.Env(p.ctx)
+	h := float64(p.barG.H)
+	bar := func(s *gfx.Sprite, x int, share float64) {
+		share = min(share, 1)
+		top := barY + int((1-share)*h)
+		c.SetClip(image.Rect(x, top, x+s.W, barY+s.H))
+		c.Blit(s, x, barY)
+		c.ResetClip()
+	}
+	for i := range p.m.Players {
+		pl := &p.m.Players[i]
+		if pl.HP > 0 {
+			share := float64(pl.HP) / float64(pl.MaxHP(e))
+			switch {
+			case share > 0.5:
+				bar(p.barG, int(p.hpBarX[i])+1, share)
+			case share > 0.25:
+				bar(p.barY, int(p.hpBarX[i])+1, share)
+			case share > 0:
+				bar(p.barR, int(p.hpBarX[i])+1, share)
+			}
+		}
+		if pl.SP > 0 {
+			bar(p.barB, int(p.spBarX[i])+1, float64(pl.SP)/float64(pl.MaxSP(e)))
 		}
 	}
 }

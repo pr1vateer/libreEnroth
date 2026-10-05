@@ -60,8 +60,7 @@ const (
 	txtPartyFull  = 0x2bf // "Party is full!"
 )
 
-// partyVar reports a variable that is not about one member (the stats of members are
-// M7's: libre-enroth's players do not have them yet).
+// partyVar reports a variable that is not about one member (playerVar: player.go).
 func partyVar(v Var) bool {
 	switch {
 	case v == VarQBits, v >= VarHour && v <= VarRandomFood, v >= VarCondFirst && v <= VarAutonotes,
@@ -165,6 +164,8 @@ func (r *run) compare(p int, v Var, value uint32) bool {
 		return h.PartyBuff(11)
 	case v == VarInParty:
 		return m.RosterSlot(int(value)) >= 0 // mm8: 0x48dd0e
+	case playerVar(v):
+		return r.comparePlayer(p, v, value)
 	case !partyVar(v):
 		h.Stub(OpCompare, nil, v)
 	}
@@ -268,6 +269,8 @@ func (r *run) add(p int, v Var, value uint32) {
 		m.QBits.Set(int(int16(value)+400), true)
 	case v == VarHour, v == VarDayOfYear, v == VarDayOfWeek, v == VarFlying, v == VarMonth,
 		v == VarLocation0C, v == VarInvisible:
+	case playerVar(v):
+		r.addPlayer(p, v, value)
 	default:
 		h.Stub(OpAdd, nil, v)
 	}
@@ -347,6 +350,8 @@ func (r *run) sub(p int, v Var, value uint32) {
 	case v == VarInParty:
 		// mm8: 0x48dbc2 (Party_RemoveMember): the value is a party slot, not a roster id.
 		m.RemoveMember(int(value))
+	case playerVar(v):
+		r.subPlayer(p, v, value)
 	case partyVar(v):
 		// the rest of the party variables cannot be subtracted
 	default:
@@ -422,6 +427,8 @@ func (r *run) set(p int, v Var, value uint32) {
 		m.Prison = int32(value)
 	case v >= VarArenaFirst && v <= VarArenaLast:
 		m.ArenaWins[v-VarArenaFirst] = byte(value)
+	case playerVar(v):
+		r.setPlayer(p, v, value)
 	case partyVar(v):
 	default:
 		h.Stub(OpSet, nil, v)

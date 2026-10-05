@@ -3,6 +3,7 @@ package party
 import (
 	"libre-enroth/internal/assets/desc"
 	"libre-enroth/internal/game/clock"
+	"libre-enroth/internal/game/items"
 )
 
 // Condition indexes Player.Conditions.
@@ -60,23 +61,54 @@ var conditionExpr = [numConditions]int{
 	CondEradicated: ExprErad, CondZombie: -1, 18: -1, 19: -1,
 }
 
-// Player is a party member: the parts of the original's Player (0x1d28 bytes, types.h)
-// that libre-enroth uses so far.
+// Player is a party member or roster character: the parts of the original's Player
+// (0x1d28 bytes, types.h) that libre-enroth uses so far.
 type Player struct {
-	Name       string               // +0x0a8
-	Class      int                  // +0x352: class id (tables.ClassByName)
-	Face       int                  // +0x353: portrait 0..29
-	RosterID   int                  // its g_players index in g_partyRoster: 0 the hero, -1 none
-	Voice      int                  // +0x1be4
-	Conditions [numConditions]int64 // +0x000: game time each began, 0 = not set
-	Recovery   int                  // +0x1bf2: ticks until the player can act again
-	HP, SP     int32                // +0x1bf8, +0x1bfc: set by the stats (M7)
-	Expr       uint16               // +0x1c86: dpft.bin expression
-	ExprTime   uint16               // +0x1c88: ticks into it
-	ExprLen    uint16               // +0x1c8a: when it ends
-	TalkFrame  int                  // +0x1c94: dpft.bin record while talking
-	TalkTime   int                  // +0x1c90
+	Name     string // +0x0a8
+	Class    int    // +0x352: class id (tables.ClassByName)
+	Face     int    // +0x353: portrait 0..29
+	RosterID int    // its g_players index in g_partyRoster: 0 the hero, -1 none
+	Voice    int    // +0x1be4
+	// OldVoice and OldFace keep the voice and face a lich had before (+0x1be8, +0x1bec).
+	OldVoice, OldFace int
+	Conditions        [numConditions]int64 // +0x000: game time each began, 0 = not set
+	Recovery          int                  // +0x1bf2: ticks until the player can act again
+	HP, SP            int32                // +0x1bf8, +0x1bfc
+	Expr              uint16               // +0x1c86: dpft.bin expression
+	ExprTime          uint16               // +0x1c88: ticks into it
+	ExprLen           uint16               // +0x1c8a: when it ends
+	TalkFrame         int                  // +0x1c94: dpft.bin record while talking
+	TalkTime          int                  // +0x1c90
+
+	Exp        int64             // +0x0a0
+	Stats      [7]StatPair       // +0x354: {base, bonus} in struct order (statSlot)
+	ACBonus    int16             // +0x370
+	LevelBase  int16             // +0x372
+	LevelBonus int16             // +0x374
+	AgeBonus   int16             // +0x376
+	Skills     [NumSkills]uint16 // +0x378
+	Awards     Bits              // +0x3c6: 64 bytes, 1-based, MSB first
+	Spells     [NumSpells]bool   // +0x406: spell id - 1, 11 per school
+	// Items are the item slots (+0x4a8; 1-based numbers in Grid and Equip). The pack
+	// uses the first items.PackSlots.
+	Items       [items.Slots]items.Item
+	Grid        items.Grid           // +0x1810
+	Resists     [NumResists]uint16   // +0x1a08 base
+	ResistBonus [NumResists]uint16   // +0x1a1e
+	Buffs       [NumPlayerBuffs]Buff // +0x1a34
+	SkillPoints int32                // +0x1bf4
+	BirthYear   int32                // +0x1c00
+	Equip       [NumSlots]int32      // +0x1c04: 1-based item slot per equipment slot
+	SpellPage   uint8                // +0x1c44: the spell book page (school) open
+	Bits        Bits                 // +0x1c46: player bits (evt variable 0xe9)
 }
+
+// Sizes of the player's bit arrays and spells.
+const (
+	AwardBytes  = 0x40
+	PlayerBytes = 0x40 // ? up to +0x1c86
+	NumSpells   = 132
+)
 
 // MainCondition is the condition that shows: the first set one in priority order, else
 // CondGood.
@@ -228,6 +260,16 @@ type Members struct {
 	// Roster holds the roster characters (g_players 0xb2177c) while they are not in the
 	// party; a member who leaves is copied back. Index 0 is the hero.
 	Roster []Player
+	// Buffs are the party buffs (+0x8a8; M9 casts them).
+	Buffs [NumPartyBuffs]Buff
+	// ArtifactsFound records the artifacts 500..542 handed out (+0x7d4): the item
+	// generator gives each only once.
+	ArtifactsFound [items.NumArtifacts]bool
+	// MouseItem is the item held on the cursor (g_mouseItem 0xb7c964; Number 0: none).
+	MouseItem items.Item
+	// Shuffle is a random order of 0..31 that party creation makes (+0x86e, past the
+	// autonote bits; nothing found so far reads it back).
+	Shuffle [32]uint8
 }
 
 // Quest and autonote bit array sizes (Party +0x77f..+0x7cf, +0x818..+0x897).
@@ -275,6 +317,9 @@ func (m *Members) NewGame(rng *Rand) {
 	m.ArenaWins = [4]uint8{}
 	m.Counters, m.Stamps, m.History = [10]clock.Time{}, [20]clock.Time{}, [29]clock.Time{}
 	m.TurnBased, m.Resting = false, false
+	// (Party_Clear zeroes the whole party before creation; here NewGame runs after it,
+	// so the creation's shuffle is kept.)
+	m.Buffs, m.ArtifactsFound, m.MouseItem = [NumPartyBuffs]Buff{}, [items.NumArtifacts]bool{}, items.Item{}
 	for i := range m.Players {
 		p := &m.Players[i]
 		p.Recovery = 0
@@ -325,4 +370,11 @@ func NewRand(seed uint32) *Rand { return &Rand{state: seed} }
 func (r *Rand) Int() int {
 	r.state = r.state*0x343fd + 0x269ec3
 	return int(r.state >> 16 & 0x7fff)
+}
+
+// IsFemale reports a female face (or voice): the odd ones below 20, and 27.
+//
+// mm8: 0x491217 (Player_IsFemale)
+func IsFemale(face int) bool {
+	return (face < 20 && face%2 == 1) || face == 27
 }

@@ -22,6 +22,10 @@ type All struct {
 	Trans      []string
 	Roster     []RosterEntry
 	Travel     *Travel
+	// Items are the item tables and the descriptions loaded with them; Classes the class
+	// and stat tables of the executable.
+	Items   *Items
+	Classes *Classes
 }
 
 // Load reads the tables from the language LODs and the house clip and travel tables
@@ -52,6 +56,12 @@ func Load(d *assets.Data) (*All, error) {
 		Roster:    ParseRoster(files["roster.txt"]),
 	}
 	var err error
+	if a.Items, err = LoadItems(d); err != nil {
+		return nil, err
+	}
+	if a.Classes, err = ReadClasses(d.Exe); err != nil {
+		return nil, err
+	}
 	if a.HouseAnims, err = ReadHouseAnims(d.Exe); err != nil {
 		return nil, err
 	}
@@ -134,4 +144,20 @@ func ExitIcon(im *exe.Image, pic int) (string, error) {
 		return "", err
 	}
 	return im.CString(uint32(p[0]))
+}
+
+// LoadItems reads the items table from the language LODs, with the item sizes from
+// icons.lod.
+//
+// mm8: 0x455a6e (Txt_LoadItemsClassesSkills)
+func LoadItems(d *assets.Data) (*Items, error) {
+	files := map[string][]byte{}
+	for _, n := range ItemFiles {
+		_, b, err := d.LangFile(n)
+		if err != nil {
+			return nil, err
+		}
+		files[n] = b
+	}
+	return ParseItems(files, d.Icons), nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
 	"libre-enroth/internal/gfx/text"
@@ -13,6 +14,9 @@ import (
 const (
 	msgStatPlus     = 0x3e
 	msgStatMinus    = 0x3f
+	msgChooseSkill  = 0x40 // param: choosable skill 0..8
+	msgDropSkill2   = 0x1cd
+	msgDropSkill3   = 0x1ce
 	msgCreateOK     = 0x42
 	msgCreateClear  = 0x43
 	msgVoiceNext    = 0x90
@@ -35,8 +39,6 @@ const (
 	vaBodyOffsets   = 0x4f8120 // [face]{x, y}
 	vaLeftHandOffs  = 0x4f8300 // [pose]{x, y}
 	vaRightHandOffs = 0x4f83a0 // [pose]{x, y, ?, ?}
-	vaClassStats    = 0x4ffa2c // [class 16][stat 7]{base, max, a, b}
-	vaClassSkills   = 0x4ffbec // [class/2][39]: 2 default, 1 choosable
 	numFaces        = 30
 	selectableFaces = 24 // face wraps at 0x17; the dragons (24, 25) are not offered
 	numClasses      = 16
@@ -92,9 +94,7 @@ func ClassForFace(face int) int {
 // IsFemale reports whether face (or a voice id) is female.
 //
 // mm8: 0x491217 (Player_IsFemale)
-func IsFemale(face int) bool {
-	return (face < 20 && face%2 == 1) || face == 27
-}
+func IsFemale(face int) bool { return party.IsFemale(face) }
 
 type partyCreate struct {
 	r        *Resources
@@ -111,15 +111,13 @@ type partyCreate struct {
 	bodyOff   []int32
 	lhandOff  []int32
 	rhandOff  []int32
-	stats     []byte // vaClassStats
-	skillTab  []byte // vaClassSkills
+	cls       *tables.Classes
 	statNames [7]string
 	skillName [numSkills + 1]string
 	className [numClasses]string
 
-	face, voice int
-	statVal     [7]int
-	chosen      [2]int // extra skills, skillNone if unset
+	// hero is the character being made (the original edits g_players[0] in place).
+	hero party.Player
 
 	name                    *Edit
 	classLbl, pointsLbl     *Label
@@ -134,7 +132,6 @@ type partyCreate struct {
 func newPartyCreate(r *Resources) (*partyCreate, error) {
 	l := &loader{r: r}
 	p := &partyCreate{r: r, bg: l.pcx("makeme.pcx"), selring: l.icon("selring", false)}
-	p.chosen = [2]int{skillNone, skillNone}
 
 	// Buttons, in Build order (which is also the event order).
 	add := func(b *Button, hotkey Key) {
@@ -170,8 +167,7 @@ func newPartyCreate(r *Resources) (*partyCreate, error) {
 	p.bodyOff = l.exeInts(vaBodyOffsets, 2*numFaces)
 	p.lhandOff = l.exeInts(vaLeftHandOffs, 2*5)
 	p.rhandOff = l.exeInts(vaRightHandOffs, 4*5)
-	p.stats = l.exeBytes(vaClassStats, numClasses*7*4)
-	p.skillTab = l.exeBytes(vaClassSkills, numClasses/2*numSkills)
+	p.cls = l.classes()
 	for i, g := range statNameGlobal {
 		p.statNames[i] = l.global(g)
 	}
@@ -221,6 +217,7 @@ func newPartyCreate(r *Resources) (*partyCreate, error) {
 		if i == 0 {
 			p.classSkillLbl = [2]*Label{left, right}
 		} else {
+			left.Msg, right.Msg = Msg{ID: msgDropSkill2}, Msg{ID: msgDropSkill3}
 			p.extraLbl = [2]*Label{left, right}
 		}
 	}
@@ -237,6 +234,7 @@ func newPartyCreate(r *Resources) (*partyCreate, error) {
 		}
 		lb := NewLabel(rct, f, "")
 		lb.Align = AlignCenter
+		lb.Msg = Msg{ID: msgChooseSkill, Param: k - 4}
 		p.choiceLbl[k-4] = lb
 		p.ct.Add(lb)
 	}
@@ -244,78 +242,33 @@ func newPartyCreate(r *Resources) (*partyCreate, error) {
 	return p, nil
 }
 
-func (p *partyCreate) class() int { return ClassForFace(p.face) }
+func (p *partyCreate) class() int { return p.hero.Class }
 
-func (p *partyCreate) statEntry(stat int) []byte {
-	o := (p.class()*7 + stat) * 4
-	return p.stats[o : o+4]
-}
-
-// setFace selects a portrait: class, voice and stats follow it.
+// setFace selects a portrait: class, voice and the stats follow it.
 //
-// mm8: 0x433bbd (Menu_ProcessMessages 0xab/0xac)
+// mm8: 0x433bbd (Menu_ProcessMessages 0xab/0xac -> 0x492094)
 func (p *partyCreate) setFace(face int) {
-	p.face = face
-	p.voice = face
+	p.hero.Face, p.hero.Voice = face, face
+	p.hero.Class = ClassForFace(face)
 	p.reset()
 }
 
-// reset puts the stats back to the class base values and clears the extra skills.
+// reset puts the stats and skills back to the class's.
 //
-// mm8: 0x433bbd (msg 0x43 -> FUN_00492094)
+// mm8: 0x433bbd (msg 0x43 -> 0x492094)
 func (p *partyCreate) reset() {
-	for i := range p.statVal {
-		p.statVal[i] = int(p.statEntry(i)[0])
-	}
-	p.chosen = [2]int{skillNone, skillNone}
+	p.hero.ResetCreation(p.cls)
 	p.refresh()
 }
 
-// CreationSkill returns the skill shown in creation slot n: 0-1 class skills, 2-3 the
-// chosen extras, 4-12 the choosable ones; 39 (None) when there is none.
-//
-// mm8: 0x4912b0 (Player_CreationSkill)
-func (p *partyCreate) CreationSkill(n int) int {
-	row := p.skillTab[p.class()/2*numSkills:][:numSkills]
-	pick := func(kind byte, idx int) int {
-		for s, v := range row {
-			if v == kind {
-				if idx == 0 {
-					return s
-				}
-				idx--
-			}
-		}
-		return skillNone
-	}
-	switch {
-	case n < 0:
-	case n < 2:
-		return pick(2, n)
-	case n < 4:
-		return p.chosen[n-2]
-	case n < 13:
-		return pick(1, n-4)
-	}
-	return skillNone
-}
+// CreationSkill returns the skill shown in creation slot n (party.Player.CreationSkill).
+func (p *partyCreate) CreationSkill(n int) int { return p.hero.CreationSkill(p.cls, n) }
 
-// PointsLeft is the bonus pool: 15 plus the cost-weighted distance of every stat from
-// its class base.
-//
-// mm8: 0x49170c (PartyCreate_PointsLeft)
-func (p *partyCreate) PointsLeft() int {
-	pts := 15
-	for i, v := range p.statVal {
-		e := p.statEntry(i)
-		base, a, b := int(e[0]), int(e[2]), int(e[3])
-		if v < base {
-			a, b = b, a
-		}
-		pts += (base - v) * a / b
-	}
-	return pts
-}
+// PointsLeft is the bonus pool (party.Player.PointsLeft).
+func (p *partyCreate) PointsLeft() int { return p.hero.PointsLeft(p.cls) }
+
+// stat is the creation row i's value (rows in stat code order).
+func (p *partyCreate) stat(i int) int { return p.hero.Base(party.Stat(i)) }
 
 // refresh updates every label from the model.
 //
@@ -324,16 +277,16 @@ func (p *partyCreate) refresh() {
 	p.classLbl.Text = p.className[p.class()]
 	p.pointsLbl.Text = fmt.Sprintf("%d", p.PointsLeft())
 	for i := 0; i < 7; i++ {
-		e := p.statEntry(i)
+		e := p.cls.Stats[p.class()][i]
 		switch {
-		case e[2] == 2:
+		case e.UpCost == 2:
 			p.statLbl[i].Color = gfx.RGB16(0xff, 0, 0)
-		case e[3] == 2:
+		case e.UpStep == 2:
 			p.statLbl[i].Color = gfx.RGB16(0, 0xff, 0)
 		default:
 			p.statLbl[i].Color = gfx.RGB16(0xff, 0xff, 0xff)
 		}
-		p.statValLbl[i].Text = fmt.Sprintf("%d", p.statVal[i])
+		p.statValLbl[i].Text = fmt.Sprintf("%d", p.stat(i))
 	}
 	for i := 0; i < 2; i++ {
 		p.classSkillLbl[i].Text = p.skillName[p.CreationSkill(i)]
@@ -344,7 +297,7 @@ func (p *partyCreate) refresh() {
 		lb := p.choiceLbl[k-4]
 		lb.Text = p.skillName[s]
 		lb.Color = gfx.RGB16(0xff, 0xff, 0xff)
-		if s != skillNone && (s == p.chosen[0] || s == p.chosen[1]) {
+		if s != skillNone && (s == p.CreationSkill(2) || s == p.CreationSkill(3)) {
 			lb.Color = gfx.RGB16(0, 200, 0xff)
 		}
 	}
@@ -354,7 +307,19 @@ func (p *partyCreate) refresh() {
 func (p *partyCreate) Name() string { return p.name.Text }
 
 // Face is the selected portrait.
-func (p *partyCreate) Face() int { return p.face }
+func (p *partyCreate) Face() int { return p.hero.Face }
+
+// Hero is the character being made.
+func (p *partyCreate) Hero() *party.Player { return &p.hero }
+
+// done reports the character complete: every point spent and two skills chosen. (The
+// original shows global.txt 412 for 4 s in a pop-up box otherwise; that box comes with
+// M7b's pop-ups.)
+//
+// mm8: 0x433bbd (msg 0x42: PartyCreate_PointsLeft() == 0 && HasTwoExtraSkills())
+func (p *partyCreate) done() bool {
+	return p.PointsLeft() == 0 && p.hero.HasTwoExtraSkills()
+}
 
 func (p *partyCreate) Update(in *Input) Transition {
 	p.name.Type(in)
@@ -362,9 +327,9 @@ func (p *partyCreate) Update(in *Input) Transition {
 	for _, m := range p.ct.Queue.Drain() {
 		switch m.ID {
 		case msgFaceNext:
-			p.setFace((p.face + 1) % selectableFaces)
+			p.setFace((p.hero.Face + 1) % selectableFaces)
 		case msgFacePrev:
-			p.setFace((p.face + selectableFaces - 1) % selectableFaces)
+			p.setFace((p.hero.Face + selectableFaces - 1) % selectableFaces)
 		case msgVoiceNext, msgVoicePrev:
 			// Cycle through voices of the portrait's sex (heard in M11). The right
 			// arrow (0x90) steps down, the left one (0x91) up.
@@ -373,25 +338,47 @@ func (p *partyCreate) Update(in *Input) Transition {
 				step = 23
 			}
 			for {
-				p.voice = (p.voice + step) % 24
-				if IsFemale(p.voice) == IsFemale(p.face) {
+				p.hero.Voice = (p.hero.Voice + step) % 24
+				if IsFemale(p.hero.Voice) == IsFemale(p.hero.Face) {
 					break
 				}
 			}
 		case msgDefaultVoice:
-			p.voice = p.face
+			p.hero.Voice = p.hero.Face
+		case msgStatPlus:
+			p.hero.StatUp(p.cls, party.Stat(m.Param)) // the error sound 0x1b on failure (M11)
+			p.refresh()
+		case msgStatMinus:
+			p.hero.StatDown(p.cls, party.Stat(m.Param))
+			p.refresh()
+		case msgChooseSkill:
+			p.hero.ChooseSkill(p.cls, m.Param)
+			p.refresh()
+		case msgDropSkill2, msgDropSkill3:
+			p.hero.DropSkill(p.cls, 2+m.ID-msgDropSkill2)
+			p.refresh()
 		case msgCreateClear:
 			p.reset()
 		case msgCreateOK:
-			// The original also requires PointsLeft() == 0 and two extra skills
-			// (0x49170c, 0x4916e0); point allocation and skills arrive with M7.
-			// The hero becomes member 1; any further members come from -party.
-			hero := party.Player{Name: p.Name(), Face: p.face, Voice: p.voice, Class: p.class()}
-			if m := p.r.Party; len(m.Players) == 0 {
+			if !p.done() {
+				continue
+			}
+			// The hero becomes member 1 (level 1, as roster.txt's row 0 has it); any
+			// further members come from -party. PartyCreation_Run's ending gives the
+			// starting items.
+			hero := p.hero
+			hero.Name, hero.LevelBase, hero.RosterID, hero.Expr = p.Name(), 1, 0, party.ExprNormal
+			m := p.r.Party
+			if len(m.Players) == 0 {
 				m.Players = []party.Player{hero}
 			} else {
 				m.Players[0] = hero
 			}
+			ctx, err := p.r.Ctx()
+			if err != nil {
+				return Transition{err: err}
+			}
+			m.FinishCreation(ctx)
 			return goTo(StateInGame)
 		case msgCancel:
 			return goTo(StateTitle)
@@ -405,15 +392,15 @@ func (p *partyCreate) Update(in *Input) Transition {
 // mm8: 0x4c7726 (GuiPartyCreate_Draw)
 func (p *partyCreate) Draw(c *gfx.Canvas) {
 	c.Blit(p.bg, 0, 0)
-	c.Blit(p.portrait[p.face], 4, 162)
+	c.Blit(p.portrait[p.hero.Face], 4, 162)
 	c.BlitKeyed(p.selring, 4, 162)
 	p.ct.Draw(c)
 
-	c.Blit(p.backDoll[p.face], 454, 54)
+	c.Blit(p.backDoll[p.hero.Face], 454, 54)
 	bx, by := int(p.dollBase[0])-13, int(p.dollBase[1])+31
-	c.BlitKeyed(p.body[p.face], int(p.bodyOff[2*p.face])+bx, int(p.bodyOff[2*p.face+1])+by)
+	c.BlitKeyed(p.body[p.hero.Face], int(p.bodyOff[2*p.hero.Face])+bx, int(p.bodyOff[2*p.hero.Face+1])+by)
 	pose := 0
-	switch p.face {
+	switch p.hero.Face {
 	case 22, 23:
 		pose = 3
 	case 20, 21:
@@ -421,10 +408,10 @@ func (p *partyCreate) Draw(c *gfx.Canvas) {
 	case 24, 25:
 		pose = 4
 	default:
-		if IsFemale(p.face) {
+		if IsFemale(p.hero.Face) {
 			pose = 1
 		}
 	}
-	c.BlitKeyed(p.lhand[p.face], int(p.lhandOff[2*pose])+bx, int(p.lhandOff[2*pose+1])+by)
-	c.BlitKeyed(p.rhand[p.face], int(p.rhandOff[4*pose])+bx, int(p.rhandOff[4*pose+1])+by)
+	c.BlitKeyed(p.lhand[p.hero.Face], int(p.lhandOff[2*pose])+bx, int(p.lhandOff[2*pose+1])+by)
+	c.BlitKeyed(p.rhand[p.hero.Face], int(p.rhandOff[4*pose])+bx, int(p.rhandOff[4*pose+1])+by)
 }

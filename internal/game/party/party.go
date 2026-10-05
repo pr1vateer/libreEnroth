@@ -51,7 +51,7 @@ const (
 // milestones that own them plug in.
 type Hooks interface {
 	FaceEvent(event int)           // pressure plate: run the map event (Evt_Process, M5)
-	FallDamage(height int32)       // landed after falling this far (M7)
+	FallDamage(height int32)       // landed after falling this far (Members.FallDamage)
 	Splash(x, y, z int32)          // landed in water (Splash_Spawn 0x42ee72)
 	Steps(run bool, s StepSurface) // footsteps (M11)
 	StopSteps()

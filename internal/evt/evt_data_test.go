@@ -85,3 +85,29 @@ func TestParseAll(t *testing.T) {
 	}
 	t.Logf("opcodes:%s", b.String())
 }
+
+// The item opcodes' arguments in the shipped scripts: GiveItem levels are 1..6 (the
+// level clamp of giveItem never changes one), SummonItem levels (id / 1000) too.
+func TestItemOpcodeArgs(t *testing.T) {
+	scripts, _ := allScripts(t)
+	kinds := map[int]int{}
+	n, summons := 0, 0
+	for name, s := range scripts {
+		for _, r := range s.Records {
+			switch r.Op() {
+			case OpGiveItem:
+				n++
+				kinds[r.U8(6)]++
+				if l := r.U8(5); l < 1 || l > 6 {
+					t.Errorf("%s event %d: GiveItem level %d", name, r.ID(), l)
+				}
+			case OpSummonItem:
+				summons++
+				if v := r.U32(5); v > 1000 && (v/1000 < 1 || v/1000 > 6) {
+					t.Errorf("%s event %d: SummonItem %d", name, r.ID(), v)
+				}
+			}
+		}
+	}
+	t.Logf("%d GiveItem (kinds %v), %d SummonItem", n, kinds, summons)
+}

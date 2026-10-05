@@ -78,11 +78,12 @@ var screenHashes = map[string]string{
 	"create_idle":        "6ae54a44656893fa797058299aea2787b59ea1de72d04c9c36d1713e664f8938",
 	"create_name_face5":  "b82d890ff1d02aae347237339f753835f313cc7c762ac0911a9d265fd5a61a15",
 	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
-	"ingame":             "78a921cbfba3384176072faccd22d343db0faf930fcbcfd26490b7f268539b77",
-	"ingame_party5_sel3": "7f85abd6c6baef83429079e43b40a3641ed772104a4ccd9d49adfc4e2940b777",
+	"create_points":      "9340460383f833069cb53065edb86e30945689d37c44766bea64690b53f40cd2",
+	"ingame":             "a39ab68f15e96477ad4a4933c2b8ce79861e0392229d260a40758290c638228b",
+	"ingame_party5_sel3": "8b6160b8edc2182e1d0e92817bbee9f503b2402ab988d96834d5abf6397bbe7d",
 	// rest_test.go
-	"rest_open":  "994896d6b406f9ab0509ef642000266cf883b89142a9a2fe1bbef07c4dec2236",
-	"hover_time": "21c5f4b8a19efe3c3ff10ed0203c6cfc0f90dbf36e48d1a5eb4ee6084f61816a",
+	"rest_open":  "e73e09fff32821ad0fc3d46f6d6cfe43628c5c556a840f2314d0a9077125f431",
+	"hover_time": "c39d61b3728ff97cf140874e265d5c3f09fd84b892306f93b98affcc59d2223c",
 }
 
 func TestScreens(t *testing.T) {
@@ -174,7 +175,9 @@ func TestFlow(t *testing.T) {
 	step(StateCreate, click(560, 215)...)           // New Game
 	step(StateTitle, Input{Keys: []Key{KeyEscape}}) // Cancel hotkey
 	step(StateCreate, Input{Keys: []Key{'N'}})      // N hotkey
-	step(StateInGame, click(580, 455)...)           // OK
+	step(StateCreate, click(580, 455)...)           // OK refuses: points left, no skills
+	finishCreate(t, a)
+	step(StateInGame, click(580, 455)...) // OK
 	if v := a.Viewport(); v.Dx() != 640 || v.Min.Y != 29 || v.Max.Y != 367 {
 		t.Errorf("in-game viewport %v", v)
 	}
@@ -220,14 +223,14 @@ func TestCreateTables(t *testing.T) {
 	if p.className[4] != "Knight" || p.skillName[skillNone] != "None" || p.statNames[0] != "Might" {
 		t.Errorf("names: %q %q %q", p.className[4], p.skillName[skillNone], p.statNames[0])
 	}
-	if p.PointsLeft() != 15 || p.statVal[0] != 11 {
-		t.Errorf("knight: points %d might %d", p.PointsLeft(), p.statVal[0])
+	if p.PointsLeft() != 15 || p.stat(0) != 11 {
+		t.Errorf("knight: points %d might %d", p.PointsLeft(), p.stat(0))
 	}
 	p.setFace(22) // Troll: Might 14 (cheap, green), Intellect 7 (dear, red)
-	if p.statVal[0] != 14 || p.statVal[1] != 7 || p.statLbl[0].Color != gfx.RGB16(0, 0xff, 0) || p.statLbl[1].Color != gfx.RGB16(0xff, 0, 0) {
-		t.Errorf("troll: %v colours %#x %#x", p.statVal, p.statLbl[0].Color, p.statLbl[1].Color)
+	if p.stat(0) != 14 || p.stat(1) != 7 || p.statLbl[0].Color != gfx.RGB16(0, 0xff, 0) || p.statLbl[1].Color != gfx.RGB16(0xff, 0, 0) {
+		t.Errorf("troll: %d/%d colours %#x %#x", p.stat(0), p.stat(1), p.statLbl[0].Color, p.statLbl[1].Color)
 	}
-	p.statVal[0] = 16 // two points over base at 1/2 per point
+	p.hero.Stats[0].Base = 16 // two points over base at 1/2 per point
 	if p.PointsLeft() != 14 {
 		t.Errorf("troll might 16: points %d", p.PointsLeft())
 	}
@@ -235,5 +238,55 @@ func TestCreateTables(t *testing.T) {
 		if p.CreationSkill(k) == skillNone {
 			t.Errorf("troll class skill %d missing", k)
 		}
+	}
+}
+
+// clickAt is a press and release at x, y.
+func clickAt(x, y int) []Input {
+	return []Input{{X: x, Y: y}, {X: x, Y: y, Left: true, LeftPressed: true}, {X: x, Y: y, LeftReleased: true}}
+}
+
+// finishCreate completes the character on the creation screen the way a player would:
+// it clicks + on the stats in turn until no point is left, then picks the first two
+// choosable skills.
+func finishCreate(t *testing.T, a *App) {
+	t.Helper()
+	p := a.Screen().(*partyCreate)
+	for i := 0; i < 7 && p.PointsLeft() > 0; i++ {
+		for n := 0; n < 40 && p.PointsLeft() > 0; n++ {
+			before := p.PointsLeft()
+			run(t, a, clickAt(170, p.statValLbl[i].R.Y+2)...)
+			if p.PointsLeft() == before {
+				break
+			}
+		}
+	}
+	for k := 0; k < 2; k++ {
+		r := p.choiceLbl[k].R
+		run(t, a, clickAt(r.X+r.W/2, r.Y+r.H/2)...)
+	}
+	if !p.done() {
+		t.Fatalf("creation not done: %d points, skills %v", p.PointsLeft(), p.hero.Skills)
+	}
+}
+
+// The creation screen with every point spent and two skills chosen (the chosen ones
+// in the extra row and highlighted among the choices).
+func TestCreatePoints(t *testing.T) {
+	a := newTestApp(t, StateCreate)
+	run(t, a, Input{X: 600, Y: 20})
+	finishCreate(t, a)
+	run(t, a, Input{X: 600, Y: 20})
+	c := gfx.NewCanvas()
+	a.Draw(c)
+	sum := sha256.Sum256(c.Img.Pix)
+	got := hex.EncodeToString(sum[:])
+	if *update {
+		writePNG(t, c, "create_points")
+		t.Logf("%q: %q,", "create_points", got)
+		return
+	}
+	if want := screenHashes["create_points"]; got != want {
+		t.Errorf("canvas sha256 %s, want %s (inspect with -update)", got, want)
 	}
 }

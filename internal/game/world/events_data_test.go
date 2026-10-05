@@ -66,7 +66,8 @@ func runGuarded(t *testing.T, what string, fn func()) {
 
 // TestEventSweep loads every map (running its OnMapReload events and timers) and runs
 // every one of its events from step 0, then every global.evt event as an NPC topic and
-// as an interactive decoration: none panics or loops.
+// as an interactive decoration: none panics or loops. The party has the real item and class
+// tables, so the member variables and the item opcodes run too.
 func TestEventSweep(t *testing.T) {
 	e := newEnv(t)
 	var maps []string
@@ -81,7 +82,7 @@ func TestEventSweep(t *testing.T) {
 	}
 	events := 0
 	for _, name := range maps {
-		w := e.load(t, name, quietSession())
+		w := e.load(t, name, e.statSession(0, 5, 12))
 		if w.vm.Map == nil {
 			continue
 		}
@@ -100,7 +101,7 @@ func TestEventSweep(t *testing.T) {
 			w.travel = nil
 		}
 	}
-	w := e.load(t, "d05.blv", quietSession())
+	w := e.load(t, "d05.blv", e.statSession(0, 5, 12))
 	seen := map[int]bool{}
 	for _, r := range e.tables.Global.Records {
 		if id := r.ID(); !seen[id] {

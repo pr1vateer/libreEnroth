@@ -67,6 +67,9 @@ type Host interface {
 	// QuestText and AutonoteText report a quest bit / autonote with text (M6): newly set
 	// ones make a member speak.
 	QuestText(n int) bool
+	// AwardText reports an award with text: a newly given one makes the member speak
+	// (M7).
+	AwardText(n int) bool
 	AutonoteText(n int) bool
 	// NPCs is the game's NPC table, which SetNPCTopic, MoveNPC, SetNPCGreeting and
 	// SetNPCGroupNews change (nil: none loaded, they do nothing).
@@ -521,6 +524,26 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 		// party or not
 		if p := r.m.RosterPlayer(int(rec.I32(5))); p != nil && p.CanAct() {
 			next = rec.U8(9)
+		}
+	case OpCheckSkill:
+		if r.checkSkill(rec) {
+			next = rec.U8(0xb)
+		}
+	case OpGiveItem:
+		r.giveItem(rec)
+	case OpSummonItem:
+		r.summonItem(rec)
+	case OpCheckItemsCount:
+		// mm8: 0x4446bd (case 0x40)
+		if CheckItemsCount(r.m, int32(rec.U16(5)), int32(rec.U16(7)), int32(rec.U16(9))) {
+			next = rec.U8(0xb)
+		}
+	case OpRemoveItems:
+		// mm8: 0x4446bd (case 0x41)
+		if t := h.Ctx().Items; t != nil {
+			RemoveItems(r.m, t, int32(rec.U16(5)), int32(rec.U16(7)), int32(rec.U16(9)))
+		} else {
+			h.Stub(op, rec, -1)
 		}
 	case OpOpenChest:
 		// OpenChest (M7) ends the event when it returns 0 (a trap went off).

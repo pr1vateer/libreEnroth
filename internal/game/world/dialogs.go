@@ -102,6 +102,12 @@ func (w *World) QuestText(n int) bool {
 	return t != nil && n > 0 && n < len(t.Quests) && t.Quests[n] != ""
 }
 
+// AwardText implements evt.Host: award n has a text.
+func (w *World) AwardText(n int) bool {
+	t := w.tables.Game
+	return t != nil && n > 0 && n < len(t.Awards) && t.Awards[n].Text != ""
+}
+
 // AutonoteText implements evt.Host: autonote n has a text.
 func (w *World) AutonoteText(n int) bool {
 	t := w.tables.Game

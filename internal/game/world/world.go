@@ -164,7 +164,7 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 	}
 	w.group.Hooks = eventHooks{w: w}
 	if m := s.Party; m.Roster == nil && tables.Game != nil {
-		m.Roster = party.NewRoster(tables.Game.Roster)
+		m.Roster = party.NewRoster(tables.Game.Roster, s.Ctx, &m.ArtifactsFound)
 	}
 	if c := s.carry; c != nil {
 		w.group.Fly, w.group.WaterWalk, w.group.FeatherFall, w.group.Levitate = c.Fly, c.WaterWalk, c.FeatherFall, c.Levitate

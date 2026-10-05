@@ -122,6 +122,15 @@ type eventHooks struct {
 // mm8: 0x472e86, 0x473fee (Party_MoveIndoor/Outdoor: Evt_Process(event, 0, 1))
 func (h eventHooks) FaceEvent(event int) { h.w.RunEvent(event, true) }
 
+// FallDamage hurts the members after a hard landing (the stats' tables loaded).
+//
+// mm8: 0x472e86, 0x473fee (Party_MoveIndoor/Outdoor)
+func (h eventHooks) FallDamage(height int32) {
+	if c := h.w.S.Ctx; c != nil && c.Items != nil && c.Classes != nil {
+		h.w.S.Party.FallDamage(height, c)
+	}
+}
+
 // ---- decorations ----------------------------------------------------------------------
 
 // decView is a level decoration of either map kind.

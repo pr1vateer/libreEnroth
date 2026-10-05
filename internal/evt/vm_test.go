@@ -64,6 +64,7 @@ func (h *fakeHost) PartyBuff(int) bool                  { return false }
 func (h *fakeHost) Flying() bool                        { return false }
 func (h *fakeHost) QuestText(int) bool                  { return false }
 func (h *fakeHost) AutonoteText(int) bool               { return false }
+func (h *fakeHost) AwardText(int) bool                  { return false }
 func (h *fakeHost) Stub(op Op, _ Record, _ Var)         { h.stubs = append(h.stubs, op) }
 func (h *fakeHost) NPCs() *npc.State                    { return h.npcs }
 func (h *fakeHost) NPCChanged(op Op, id int)            { h.notes = append(h.notes, fmt.Sprint(op, id)) }
