@@ -189,6 +189,16 @@ func (it *Item) ApplySpecial(t *tables.Items) {
 	it.Strength = int32(d.Strength)
 }
 
+// ExpireBonus removes a temporary bonus (FlagTempBonus) whose time is past now.
+//
+// mm8: 0x456f74 (Item_ExpireBonus)
+func (it *Item) ExpireBonus(now int64) {
+	if it.Flags&FlagTempBonus != 0 && it.Expires < now {
+		it.Bonus, it.Special = 0, 0
+		it.Flags &^= FlagTempBonus
+	}
+}
+
 // New is an item of id as the code makes them from a number: identified when its
 // difficulty is 0.
 //

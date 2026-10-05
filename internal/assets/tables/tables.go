@@ -383,6 +383,14 @@ const NumTrans = 500
 // mm8: 0x4771b2 (Txt_LoadTrans)
 func ParseTrans(data []byte) []string { return column1(data, NumTrans) }
 
+// NumScrolls is the number of message scrolls (items 700..781, 0x761400..0x761548).
+const NumScrolls = 82
+
+// ParseScrolls reads scroll.txt: the message scrolls' texts, 0-based (item 700 first).
+//
+// mm8: 0x476fee (Txt_LoadScroll)
+func ParseScrolls(data []byte) []string { return column1(data, NumScrolls)[1:] }
+
 // RosterEntry is a roster.txt row: a character that can join the party (g_players
 // 0xb2177c, 50 of 0x1d28 bytes; entry 0 is the created hero). Only what the party uses
 // before M7 is decoded; Cells keeps the row for the stats, skills and items.

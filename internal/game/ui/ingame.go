@@ -56,6 +56,9 @@ type inGame struct {
 	transition                  *transitionScreen
 	scoreBG                     *gfx.Sprite
 	smallnum                    *text.Font
+	char                        *charScreen
+	chest                       *chestScreen
+	lastIn                      Input // the last tick's input (the pop-ups draw at its mouse)
 }
 
 // newInGame builds the HUD frame around the viewport and loads mapName into it when
@@ -130,7 +133,7 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 // Viewport is where the world shows through.
 // The rest screen and a house (its clip) cover it.
 func (g *inGame) Viewport() image.Rectangle {
-	if g.rest != nil || g.dialog != nil && g.dialog.video != nil || g.transition != nil && g.transition.video != nil {
+	if g.rest != nil || g.char != nil || g.chest != nil || g.dialog != nil && g.dialog.video != nil || g.transition != nil && g.transition.video != nil {
 		return image.Rectangle{}
 	}
 	return Viewport
@@ -138,6 +141,24 @@ func (g *inGame) Viewport() image.Rectangle {
 
 func (g *inGame) Update(in *Input) Transition {
 	g.r.Status.Tick()
+	g.lastIn = *in
+	if g.char != nil {
+		if g.char.update(in) {
+			g.char = nil
+		}
+		g.portraits.update()
+		return Transition{}
+	}
+	if g.chest != nil {
+		if g.chest.update(in) {
+			g.chest = nil
+			if w, ok := g.world.(ChestOpener); ok {
+				w.CloseChest()
+			}
+		}
+		g.portraits.update()
+		return Transition{}
+	}
 	if g.rest != nil {
 		if g.rest.update(in) {
 			g.rest = nil
@@ -165,7 +186,9 @@ func (g *inGame) Update(in *Input) Transition {
 				return Transition{err: err}
 			}
 		case msgSelectPlayer:
-			g.portraits.m.ClickPortrait(m.Param)
+			if err := g.clickPortrait(m.Param); err != nil {
+				return Transition{err: err}
+			}
 		case msgGameMenu:
 			// The original opens the game menu (Esc); until M10/M12 it leads back
 			// to the title.
@@ -197,6 +220,12 @@ func (g *inGame) Update(in *Input) Transition {
 		if _, err := g.openDialogs(); err != nil {
 			return Transition{err: err}
 		}
+		if err := g.openChest(); err != nil {
+			return Transition{err: err}
+		}
+	}
+	if in.RightPressed {
+		g.useOnPortrait(in)
 	}
 	g.hover(in)
 	g.portraits.update()
@@ -336,6 +365,82 @@ func (g *inGame) loadMap(name string) error {
 	return l.err
 }
 
+// clickPortrait is a click on portrait slot in the game view: an item on the cursor
+// goes to that member's pack; the selected member's portrait opens the character
+// screen; another member is selected.
+//
+// mm8: 0x4213c0 (Party_ClickPortrait, g_screenMode 0)
+func (g *inGame) clickPortrait(slot int) error {
+	m := g.r.Party
+	if ctx, err := g.r.Ctx(); err == nil && m.DropOnPortrait(slot, ctx) {
+		return nil
+	}
+	if slot == m.Selected && slot >= 1 && slot <= len(m.Players) {
+		cs, err := newCharScreen(g, slot-1)
+		if err != nil {
+			return err
+		}
+		g.char = cs
+		return nil
+	}
+	m.ClickPortrait(slot)
+	return nil
+}
+
+// useOnPortrait is a right click with an item on the cursor over a portrait: that
+// member uses it.
+//
+// mm8: 0x41697c (Mouse_RightClick)
+func (g *inGame) useOnPortrait(in *Input) {
+	m := g.r.Party
+	if m.MouseItem.Number == 0 {
+		return
+	}
+	ctx, err := g.r.Ctx()
+	if err != nil {
+		return
+	}
+	for i := range m.Players {
+		if in.X >= portraitUseX[i][0] && in.X <= portraitUseX[i][1] && in.Y > 0x184 && in.Y < 0x1d6 {
+			m.UseItem(i, ctx, gameNotes{g})
+			return
+		}
+	}
+}
+
+// gameNotes is the game view as party.Notes.
+type gameNotes struct{ g *inGame }
+
+func (n gameNotes) Global(i int) string             { return n.g.r.GlobalText(i) }
+func (n gameNotes) Status(text string, seconds int) { n.g.r.Status.Show(text, seconds) }
+func (n gameNotes) Stub(key, what string)           { n.g.r.note(key, what) }
+func (n gameNotes) AutonoteText(i int) bool {
+	if w, ok := n.g.world.(interface{ AutonoteText(int) bool }); ok {
+		return w.AutonoteText(i)
+	}
+	return false
+}
+
+// openChest opens the chest screen for a chest an event opened.
+//
+// mm8: 0x420093 (Chest_Open pushes GuiChest)
+func (g *inGame) openChest() error {
+	w, ok := g.world.(ChestOpener)
+	if !ok || g.chest != nil {
+		return nil
+	}
+	v := w.OpenedChest()
+	if v == nil {
+		return nil
+	}
+	cs, err := newChestScreen(g, v)
+	if err != nil {
+		return err
+	}
+	g.chest = cs
+	return nil
+}
+
 // toggleTurnBased starts or ends turn-based mode (Enter). Only the clock part is there
 // yet: while it is on the game timer is stopped, so time and timers stand still; the
 // combat queue and rounds are M8/M9.
@@ -428,6 +533,24 @@ func (g *inGame) memberText(p *party.Player) string {
 //
 // mm8: 0x4c96cd (GuiGame_Draw)
 func (g *inGame) Draw(c *gfx.Canvas) {
+	if g.char != nil || g.chest != nil {
+		// The screen's own draw, then the portrait panel with its basebar (a child of
+		// the screen with drawBasebar set), the status line and the pop-up.
+		if g.char != nil {
+			g.char.draw(c)
+		} else {
+			g.chest.draw(c)
+		}
+		c.Blit(g.basebar, 0, 367)
+		g.r.Status.Draw(c, g.lucida)
+		g.portraits.draw(c)
+		if g.char != nil {
+			g.char.drawOver(c, &g.lastIn)
+		} else {
+			g.chest.drawOver(c, &g.lastIn)
+		}
+		return
+	}
 	c.Blit(g.topbar, 0, 0)
 	c.Blit(g.basebar, 0, 367)
 	if g.minimap != nil && g.world.Outdoor() {

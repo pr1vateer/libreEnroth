@@ -60,6 +60,8 @@ type Host interface {
 	// ChangeEvent gives interactive decoration dec a new event (0 hides it).
 	ChangeEvent(dec int, event int32)
 	ToggleChestFlag(chest int32, bit uint16, on bool)
+	// OpenChest opens chest id's screen; false (a trap went off) ends the event.
+	OpenChest(id int) bool
 	// PartyBuff reports party buff i active (vars 0xf2 fly 7, 0x13c invisibility 11;
 	// M9). Flying is Party +0x714.
 	PartyBuff(i int) bool
@@ -546,8 +548,10 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 			h.Stub(op, rec, -1)
 		}
 	case OpOpenChest:
-		// OpenChest (M7) ends the event when it returns 0 (a trap went off).
-		h.Stub(op, rec, -1)
+		// mm8: 0x4446bd (case 7: Chest_Open 0x420093, 0 ends the event)
+		if !h.OpenChest(int(rec.U8(5))) {
+			return next, true
+		}
 	default:
 		if op.Known() && op.Milestone() != "" {
 			h.Stub(op, rec, -1)

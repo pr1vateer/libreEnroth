@@ -87,8 +87,11 @@ type Player struct {
 	LevelBonus int16             // +0x374
 	AgeBonus   int16             // +0x376
 	Skills     [NumSkills]uint16 // +0x378
-	Awards     Bits              // +0x3c6: 64 bytes, 1-based, MSB first
+	Awards     PlayerBits        // +0x3c6: 64 bytes, 1-based, MSB first
 	Spells     [NumSpells]bool   // +0x406: spell id - 1, 11 per school
+	// PurePotions record the one-time +50 potions drunk (+0x48c, an int32 each): Pure
+	// Luck, Speed, Intellect, Endurance, Personality, Accuracy, Might.
+	PurePotions [7]bool
 	// Items are the item slots (+0x4a8; 1-based numbers in Grid and Equip). The pack
 	// uses the first items.PackSlots.
 	Items       [items.Slots]items.Item
@@ -100,7 +103,7 @@ type Player struct {
 	BirthYear   int32                // +0x1c00
 	Equip       [NumSlots]int32      // +0x1c04: 1-based item slot per equipment slot
 	SpellPage   uint8                // +0x1c44: the spell book page (school) open
-	Bits        Bits                 // +0x1c46: player bits (evt variable 0xe9)
+	Bits        PlayerBits           // +0x1c46: player bits (evt variable 0xe9)
 }
 
 // Sizes of the player's bit arrays and spells.
@@ -270,6 +273,11 @@ type Members struct {
 	// Shuffle is a random order of 0..31 that party creation makes (+0x86e, past the
 	// autonote bits; nothing found so far reads it back).
 	Shuffle [32]uint8
+	// CharPage is the character screen's page (g_charPage 0x5184f8: 100 stats, 0x65
+	// skills, 0x66 awards, 0x67 inventory), kept between openings; a new game starts on
+	// the stats. CharMagnify is its jewellery view (g_charMagnify 0x522f9c).
+	CharPage    int
+	CharMagnify bool
 }
 
 // Quest and autonote bit array sizes (Party +0x77f..+0x7cf, +0x818..+0x897).
@@ -302,6 +310,16 @@ func (b Bits) Set(n int, on bool) {
 	}
 }
 
+// PlayerBits is a player's 0x40-byte bit array (the awards, the player bits): 1-based,
+// most significant bit first, like Bits but always there.
+type PlayerBits [AwardBytes]byte
+
+// Get reports bit n (1-based); out of range bits are clear.
+func (b *PlayerBits) Get(n int) bool { return Bits(b[:]).Get(n) }
+
+// Set sets or clears bit n (1-based); out of range bits are ignored.
+func (b *PlayerBits) Set(n int, on bool) { Bits(b[:]).Set(n, on) }
+
 // NewGame resets the members for a new game: the first one is selected, conditions and
 // recovery are cleared and every face starts on the normal expression. The clock
 // starts at 9:00 AM on day 1, with 7 food and 200 gold.
@@ -317,6 +335,7 @@ func (m *Members) NewGame(rng *Rand) {
 	m.ArenaWins = [4]uint8{}
 	m.Counters, m.Stamps, m.History = [10]clock.Time{}, [20]clock.Time{}, [29]clock.Time{}
 	m.TurnBased, m.Resting = false, false
+	m.CharPage, m.CharMagnify = 100, false // Party_InitNewGame 0x49228d
 	// (Party_Clear zeroes the whole party before creation; here NewGame runs after it,
 	// so the creation's shuffle is kept.)
 	m.Buffs, m.ArtifactsFound, m.MouseItem = [NumPartyBuffs]Buff{}, [items.NumArtifacts]bool{}, items.Item{}
@@ -344,6 +363,37 @@ func (m *Members) ClickPortrait(slot int) {
 	if m.Players[slot-1].Recovery == 0 {
 		m.Selected = slot
 	}
+}
+
+// ConditionPriority is the order the main condition is looked for in.
+func ConditionPriority() []Condition { return conditionPriority[:] }
+
+// DropOnPortrait puts the item on the cursor into the pack of the member in slot (a
+// click on the portrait); with no room, the member says so (0xf), or the selected one
+// when that member cannot act. It reports the item stored (the click then does nothing
+// else).
+//
+// mm8: 0x4213c0 (Party_ClickPortrait: Player_AddItemNumber, whose no-slot case also
+// makes the selected member speak)
+func (m *Members) DropOnPortrait(slot int, c *Ctx) bool {
+	if m.MouseItem.Number == 0 || slot < 1 || slot > len(m.Players) {
+		return false
+	}
+	p := &m.Players[slot-1]
+	n, full := p.AddItemNumber(c.Items, -1, m.MouseItem.Number)
+	if n != 0 {
+		*p.Item(n) = m.MouseItem
+		m.MouseItem = items.Item{}
+		return true
+	}
+	m.sayFull(full, c)
+	switch {
+	case p.CanAct():
+		m.Speak(slot-1, 0xf, c)
+	case m.Selected >= 1 && m.Selected <= len(m.Players) && m.Players[m.Selected-1].CanAct():
+		m.Speak(m.Selected-1, 0xf, c)
+	}
+	return false
 }
 
 // TickExpressions advances every member's face by ticks; the original runs it once per

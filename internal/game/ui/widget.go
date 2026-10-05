@@ -374,21 +374,23 @@ type Container struct {
 	Queue    MsgQueue
 }
 
-// Add appends w; earlier children get events first.
+// Add appends w. Children draw in the order added and get events in the reverse order:
+// the last added first (the original's circular child list is walked from its tail).
 //
-// mm8: 0x4c4444 (GuiContainer_AddChild)
+// mm8: 0x4c4444 (GuiContainer_AddChild -> 0x4c68b7 appends at the tail)
 func (ct *Container) Add(w Widget) { ct.Children = append(ct.Children, w) }
 
-// dispatch offers an event to the hovered widget, then to every child in order, until
-// one consumes it.
+// dispatch offers an event to the hovered widget, then to every child from the last
+// added back, until one consumes it.
 //
-// mm8: 0x4c3fde, 0x4c40de, 0x4c41de (GuiContainer_OnLButtonDown/Up, OnMouseMove)
+// mm8: 0x4c3fde, 0x4c40de, 0x4c41de (GuiContainer_OnLButtonDown/Up, OnMouseMove: from
+// childHead->prev, following prev)
 func (ct *Container) dispatch(f func(Widget) bool) {
 	if ct.hover != nil && f(ct.hover) {
 		return
 	}
-	for _, w := range ct.Children {
-		if f(w) {
+	for i := len(ct.Children) - 1; i >= 0; i-- {
+		if f(ct.Children[i]) {
 			return
 		}
 	}
@@ -399,8 +401,8 @@ func (ct *Container) Update(in *Input) {
 	q := &ct.Queue
 	ct.dispatch(func(w Widget) bool { return w.OnMouseMove(in.X, in.Y, q) })
 	ct.hover = nil
-	for _, w := range ct.Children {
-		if w.base().hovered {
+	for i := len(ct.Children) - 1; i >= 0; i-- {
+		if w := ct.Children[i]; w.base().hovered {
 			ct.hover = w
 			break
 		}
@@ -411,10 +413,10 @@ func (ct *Container) Update(in *Input) {
 	if in.LeftReleased {
 		ct.dispatch(func(w Widget) bool { return w.OnLButtonUp(in.X, in.Y, q) })
 	}
-	// mm8: 0x4c4338 (GuiContainer_OnKey: children in order)
+	// mm8: 0x4c4338 (GuiContainer_OnKey: the children from the last added back)
 	for _, k := range in.Keys {
-		for _, w := range ct.Children {
-			if w.OnKey(k, q) {
+		for i := len(ct.Children) - 1; i >= 0; i-- {
+			if ct.Children[i].OnKey(k, q) {
 				break
 			}
 		}

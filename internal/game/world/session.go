@@ -74,6 +74,17 @@ func (s *Session) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
+// note logs what a later milestone does, once per key.
+func (s *Session) note(key, what string) {
+	if s.noted == nil {
+		s.noted = map[string]bool{}
+	}
+	if !s.noted[key] {
+		s.noted[key] = true
+		s.logf("%s", what)
+	}
+}
+
 func (s *Session) global(i int) string {
 	if s.Global == nil {
 		return ""

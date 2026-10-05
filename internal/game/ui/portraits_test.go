@@ -38,8 +38,21 @@ func TestPortraitSelect(t *testing.T) {
 	step(2, click(118+61, 389+80)...) // the hit test is inclusive
 	step(2, Input{Keys: []Key{'5'}})  // empty slots are disabled
 	step(2, click(405, 400)...)
-	step(2, Input{Keys: []Key{'2'}}) // the selected one again: character screen (M7)
+	step(2, Input{Keys: []Key{'2'}}) // the selected one again: the character screen
+	g := inGameOf(t, a)
+	if g.char == nil || g.char.member != 1 {
+		t.Fatalf("character screen %v", g.char)
+	}
 	m.Players[0].Recovery = 10
+	step(1, Input{Keys: []Key{'1'}}) // in the character screen: shows member 1, recovering or not
+	if g.char == nil || g.char.member != 0 {
+		t.Fatal("character screen did not switch")
+	}
+	step(1, Input{Keys: []Key{KeyEscape}})
+	if g.char != nil {
+		t.Fatal("Esc did not close the character screen")
+	}
+	step(2, Input{Keys: []Key{'2'}})
 	step(2, Input{Keys: []Key{'1'}}) // recovering
 	m.Players[0].Recovery = 0
 	step(1, Input{Keys: []Key{'1'}})

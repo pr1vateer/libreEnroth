@@ -80,13 +80,24 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - Type to enter the name; **Backspace** deletes.
   - The arrows next to "Portrait" change the face and, with it, the class.
   - **Enter** = OK, **Esc** = Cancel, **C** = Clear.
-  - Stat points and skill choices are not implemented yet (M7).
+  - **+/−** beside a stat spend or return points; click two of the offered skills.
 - **In game** (free camera; M4 brings real party movement):
   - **W/S** or **↑/↓** move, **A/D** strafe, **←/→** turn, **PgUp/PgDn** look up/down.
   - **Space/C** fly up/down, **Shift** moves 4× faster, right-drag looks around.
   - **F2** (indoors) opens every closed door and closes every open one.
   - **+/−** next to the minimap zoom it (outdoors).
-  - **1–5** or a click on a portrait selects a party member.
+  - **1–5** or a click on a portrait selects a party member; the selected member again
+    opens the **character screen**:
+    - **S**tats, s**K**ills, **I**nventory, **A**wards pages; **Esc** closes it.
+    - Click an item to pick it up, click again to drop it (or to swap); click the paper doll
+      to wear the item on the cursor or take one off; the magnifier shows the rings.
+    - On the skills page a click on a skill spends skill points on it.
+    - Hold the right button on an item for its description (and on a stat or skill).
+    - With an item on the cursor, right-click another to mix potions (or a reagent into a
+      bottle); drop a potion on the paper doll, or right-click a portrait, to drink it.
+  - Chests opened by the map's events show their items: click to take (gold goes to the
+    party), click on the chest to put the cursor's item back; the selected portrait again
+    shows that member's pack.
   - **Esc** returns to the title (the original's game menu comes later).
 
 ## Developer options
@@ -100,6 +111,8 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
 | `-cam x,y,z,yaw,pitch` | camera position (z of the feet; the eye is 160 higher) and angles in 2048ths of a turn (0 = east, 512 = north) |
 | `-time HH:MM` | time of day for the outdoor lighting (default 9:00) |
 | `-party 0,5,12` | a party of 1–5 portrait faces (0–27, as in party creation); a created hero replaces the first. Default: one member with face 0 |
+| `-equip` | give the party the items of their skills, worn where they fit (debug) |
+| `-input script` | replay keys and mouse: `Up:120,1:2,Click@320/200:1,Right@40/60:5,-:30` (`Right@x/y` holds the right button) |
 
 Outdoors the camera starts at the new-game spawn for `out01.odm`, elsewhere above the map
 centre. Indoors it starts on the map's "Party Start" marker.

@@ -70,6 +70,8 @@ func TestButtonStates(t *testing.T) {
 	}
 }
 
+// The last child added gets events first (the original walks its circular child list
+// from the tail: 0x4c3fde, 0x4c4338).
 func TestHotkeyAndOrder(t *testing.T) {
 	a := NewButton(0, 0, Msg{ID: 1}, sprite(10, 10), nil, nil)
 	b := NewButton(0, 0, Msg{ID: 2}, sprite(10, 10), nil, nil) // overlaps a
@@ -77,16 +79,16 @@ func TestHotkeyAndOrder(t *testing.T) {
 	var ct Container
 	ct.Add(a)
 	ct.Add(b)
-	if m := tick(&ct, Input{X: 100, Y: 100, Keys: []Key{'N'}}); len(m) != 1 || m[0].ID != 1 || a.State != StateDown {
-		t.Errorf("hotkey: %v, state %d (first child wins, shows pressed)", m, a.State)
+	if m := tick(&ct, Input{X: 100, Y: 100, Keys: []Key{'N'}}); len(m) != 1 || m[0].ID != 2 || b.State != StateDown {
+		t.Errorf("hotkey: %v, state %d (the last child wins, shows pressed)", m, b.State)
 	}
 	tick(&ct, Input{X: 100, Y: 100, LeftReleased: true}) // any release resets the pressed icon
-	if a.State != StateUp {
-		t.Errorf("after release: state %d", a.State)
+	if b.State != StateUp {
+		t.Errorf("after release: state %d", b.State)
 	}
 	tick(&ct, Input{X: 5, Y: 5, Left: true, LeftPressed: true})
-	if m := tick(&ct, Input{X: 5, Y: 5, LeftReleased: true}); len(m) != 1 || m[0].ID != 1 {
-		t.Errorf("overlap click: %v (first child consumes)", m)
+	if m := tick(&ct, Input{X: 5, Y: 5, LeftReleased: true}); len(m) != 1 || m[0].ID != 2 {
+		t.Errorf("overlap click: %v (the last child consumes)", m)
 	}
 }
 

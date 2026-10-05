@@ -143,6 +143,9 @@ type Items struct {
 	StatDesc [26]string
 	// ClassDesc are class.txt's descriptions (0x5e4824).
 	ClassDesc [NumClasses]string
+	// Potion is potion.txt's mixing table (g_items + 0xf048), PotNotes potnotes.txt's
+	// autonotes (+0x103d0).
+	Potion, PotNotes *MixTable
 }
 
 // Table sizes.
@@ -184,12 +187,12 @@ func lines(data []byte, skip int) []string {
 }
 
 // ItemFiles are the language-LOD files the items table is read from.
-var ItemFiles = []string{"items.txt", "stditems.txt", "spcitems.txt", "rnditems.txt", "skilldes.txt", "stats.txt", "class.txt"}
+var ItemFiles = []string{"items.txt", "stditems.txt", "spcitems.txt", "rnditems.txt", "skilldes.txt", "stats.txt", "class.txt", "potion.txt", "potnotes.txt"}
 
 // ParseItems reads the items table from files (keyed by ItemFiles' names); icons, when
 // not nil, gives every item its cell size from its icon.
 //
-// mm8: 0x455a6e (Txt_LoadItemsClassesSkills)
+// mm8: 0x455a6e (Txt_LoadItemsClassesSkills), 0x452662, 0x452807
 func ParseItems(files map[string][]byte, icons *lod.Archive) *Items {
 	t := &Items{Items: make([]ItemDef, NumItems), Std: make([]StdBonus, NumStd), Spc: make([]SpcBonus, NumSpc), SpcCount: spcDrawn}
 	t.parseStd(files["stditems.txt"])
@@ -197,6 +200,7 @@ func ParseItems(files map[string][]byte, icons *lod.Archive) *Items {
 	t.parseItems(files["items.txt"])
 	t.parseRnd(files["rnditems.txt"])
 	t.parseDescs(files["skilldes.txt"], files["stats.txt"], files["class.txt"])
+	t.Potion, t.PotNotes = parseMix(files["potion.txt"]), parseMix(files["potnotes.txt"])
 	for i := range t.Items {
 		t.Items[i].W, t.Items[i].H = 1, 1
 		if icons != nil {

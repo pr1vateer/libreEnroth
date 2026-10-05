@@ -81,7 +81,7 @@ type opInfo struct {
 var opInfos = map[Op]opInfo{
 	OpExit: {"Exit", ""}, OpSpeakInHouse: {"SpeakInHouse", ""}, OpPlaySound: {"PlaySound", "M11"},
 	OpHint: {"Hint", ""}, OpLocationName: {"LocationName", ""}, OpMoveToMap: {"MoveToMap", ""},
-	OpOpenChest: {"OpenChest", "M7"}, OpShowFace: {"ShowFace", ""}, OpReceiveDamage: {"ReceiveDamage", "M9"},
+	OpOpenChest: {"OpenChest", ""}, OpShowFace: {"ShowFace", ""}, OpReceiveDamage: {"ReceiveDamage", "M9"},
 	OpSetSnow: {"SetSnow", ""}, OpSetTexture: {"SetTexture", ""}, OpShowMovie: {"ShowMovie", "M11"},
 	OpSetSprite: {"SetSprite", ""}, OpCompare: {"Compare", ""}, OpChangeDoorState: {"ChangeDoorState", ""},
 	OpAdd: {"Add", ""}, OpSubtract: {"Subtract", ""}, OpSet: {"Set", ""},

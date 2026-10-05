@@ -19,6 +19,7 @@ type scriptStep struct {
 	ticks int
 	mouse *image.Point // the mouse stays here for the step
 	click bool         // the left button goes down on the first tick, up on the last
+	right bool         // the right button is held through the step (down on its first tick)
 }
 
 // scriptKeys names the non-character keys a script may use.
@@ -34,7 +35,8 @@ var scriptKeys = map[string]Key{
 // ParseScript parses steps "keys:ticks" separated by commas, where keys are key names
 // joined by '+' (letters, digits, Up, Shift, PgUp, F3, '[', ...) or '-' for none:
 // "Up:120,X:1,Right+Shift:30,-:60". "Mouse@x/y" puts the mouse at UI point (x, y) for
-// the step and "Click@x/y" also clicks the left button there: "Click@320/200:2". A
+// the step and "Click@x/y" also clicks the left button there: "Click@320/200:2";
+// "Right@x/y" holds the right button there for the step (released after it). A
 // letter or digit key types its character too (lower case).
 func ParseScript(s string) (*Script, error) {
 	sc := &Script{}
@@ -63,6 +65,8 @@ func ParseScript(s string) (*Script, error) {
 					case "mouse":
 					case "click":
 						st.click = true
+					case "right":
+						st.right = true
 					default:
 						return nil, fmt.Errorf("script step %q: unknown action %q", part, verb)
 					}
@@ -124,6 +128,10 @@ func (s *Script) Next(in *Input) {
 				in.Left = true
 				in.LeftPressed = in.LeftPressed || t == 0
 				in.LeftReleased = in.LeftReleased || t == st.ticks-1
+			}
+			if st.right {
+				in.Right = true
+				in.RightPressed = in.RightPressed || t == 0
 			}
 			break
 		}

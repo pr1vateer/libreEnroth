@@ -317,3 +317,37 @@ func (f *Font) GlyphWithShadowPal(c *gfx.Canvas, x, y int, ch byte, ink gfx.Colo
 		}
 	}
 }
+
+// DrawClipped draws s at offset (x, y) in r on one line no wider than maxWidth: text
+// narrower than that is drawn as Draw does; longer text is cut before the character
+// at which the running width reached maxWidth (colour codes and \r take no width) and
+// drawn unwrapped. It returns the width drawn.
+//
+// mm8: 0x44b450 (Font_DrawTextClipped, without its reversed mode)
+func (f *Font) DrawClipped(c *gfx.Canvas, r Rect, x, y int, ink gfx.Color16, s string, maxWidth int) int {
+	if w := f.TextWidth(s); w < maxWidth {
+		f.Draw(c, r, x, y, ink, 0, s, 0)
+		return w
+	}
+	w, i := 0, 0
+	for ; i < len(s) && w < maxWidth; i++ {
+		ch := s[i]
+		if !f.IsPrintable(ch) {
+			continue
+		}
+		switch {
+		case ch == 9 || ch == 10 || ch == '\r':
+		case ch == '\f':
+			i += 5
+		default:
+			m := f.Metrics[ch]
+			if i > 0 {
+				w += int(m.Left)
+			}
+			w += int(m.Width) + int(m.Right)
+		}
+	}
+	t := s[:max(i-1, 0)]
+	f.Draw(c, r, x, y, ink, 0, t, 1<<30)
+	return f.TextWidth(t)
+}

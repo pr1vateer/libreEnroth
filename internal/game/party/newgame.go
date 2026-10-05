@@ -247,3 +247,22 @@ func (m *Members) DefaultMember(i int, c *Ctx) {
 	e := m.Env(c)
 	p.HP, p.SP = p.MaxHP(e), p.MaxSP(e)
 }
+
+// DebugEquip gives member i the items of its skills, as party creation gives the hero,
+// and wears what it can (a debug aid for the -equip flag; not in the original).
+func (m *Members) DebugEquip(i int, c *Ctx) {
+	p := &m.Players[i]
+	for s := 0; s < NumSkills; s++ {
+		id := skillItems[s]
+		if p.Skills[s] == 0 || id == 0 {
+			continue
+		}
+		it := items.New(c.Items, id)
+		it.Flags |= items.FlagIdentified
+		if !p.EquipItem(c.Items, c.Classes, it) {
+			p.AddItem(c.Items, -1, it)
+		}
+	}
+	e := m.Env(c)
+	p.HP, p.SP = p.MaxHP(e), p.MaxSP(e)
+}

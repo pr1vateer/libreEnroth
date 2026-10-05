@@ -20,6 +20,7 @@ type All struct {
 	Awards     []Award
 	Merchant   *Merchant
 	Trans      []string
+	Scrolls    []string // scroll.txt
 	Roster     []RosterEntry
 	Travel     *Travel
 	// Items are the item tables and the descriptions loaded with them; Classes the class
@@ -37,7 +38,7 @@ func Load(d *assets.Data) (*All, error) {
 	files := map[string][]byte{}
 	for _, n := range []string{"2DEvents.txt", "npcdata.txt", "npcgreet.txt", "npcgroup.txt", "npcnews.txt",
 		"npctopic.txt", "npctext.txt", "quests.txt", "autonote.txt", "awards.txt", "merchant.txt",
-		"trans.txt", "roster.txt"} {
+		"trans.txt", "roster.txt", "scroll.txt"} {
 		_, b, err := d.LangFile(n)
 		if err != nil {
 			return nil, err
@@ -53,6 +54,7 @@ func Load(d *assets.Data) (*All, error) {
 		Awards:    ParseAwards(files["awards.txt"]),
 		Merchant:  ParseMerchant(files["merchant.txt"]),
 		Trans:     ParseTrans(files["trans.txt"]),
+		Scrolls:   ParseScrolls(files["scroll.txt"]),
 		Roster:    ParseRoster(files["roster.txt"]),
 	}
 	var err error
@@ -160,4 +162,18 @@ func LoadItems(d *assets.Data) (*Items, error) {
 		files[n] = b
 	}
 	return ParseItems(files, d.Icons), nil
+}
+
+// LoadChests reads the chest tables from MM8-Rel.exe and dchest.bin.
+//
+// mm8: 0x4205af, dchest.bin (Lod_LoadLanguageFile("dchest.bin", 1))
+func LoadChests(d *assets.Data) (*Chests, error) {
+	if d.Exe == nil {
+		return nil, fmt.Errorf("chests: MM8-Rel.exe not opened")
+	}
+	_, b, err := d.LangFile("dchest.bin")
+	if err != nil {
+		return nil, err
+	}
+	return ReadChests(d.Exe, b)
 }

@@ -79,6 +79,7 @@ var screenHashes = map[string]string{
 	"create_name_face5":  "b82d890ff1d02aae347237339f753835f313cc7c762ac0911a9d265fd5a61a15",
 	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
 	"create_points":      "9340460383f833069cb53065edb86e30945689d37c44766bea64690b53f40cd2",
+	"create_fail":        "a89870f8ed4f94245865040d4bf77dd475b7579c2bee3e732a2c90d0dbf3329a",
 	"ingame":             "a39ab68f15e96477ad4a4933c2b8ce79861e0392229d260a40758290c638228b",
 	"ingame_party5_sel3": "8b6160b8edc2182e1d0e92817bbee9f503b2402ab988d96834d5abf6397bbe7d",
 	// rest_test.go
@@ -113,6 +114,9 @@ func TestScreens(t *testing.T) {
 			{X: 75, Y: 170, Left: true, LeftPressed: true}, {X: 75, Y: 170, LeftReleased: true},
 			{X: 75, Y: 170, Left: true, LeftPressed: true}, {X: 75, Y: 170, LeftReleased: true},
 		}, StateCreate, nil},
+		// OK with points left: global.txt 412 in a pop-up box for 4 s.
+		{"create_fail", StateCreate, []Input{{X: 560, Y: 450}, {X: 560, Y: 450, Left: true, LeftPressed: true},
+			{X: 560, Y: 450, LeftReleased: true}, {X: 600, Y: 20}}, StateCreate, nil},
 		{"ingame", StateInGame, []Input{{X: 320, Y: 200}}, StateInGame, nil},
 		// Five members, '3' selects the third; after 440 ticks it shows an idle face.
 		{"ingame_party5_sel3", StateInGame, append([]Input{{X: 320, Y: 200, Keys: []Key{'3'}}}, repeat(Input{X: 320, Y: 200}, 439)...), StateInGame, []int{0, 5, 12, 17, 22}},

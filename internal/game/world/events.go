@@ -79,6 +79,7 @@ func (w *World) loadScripts(d *assets.Data) error {
 // mm8: 0x46411c (map load: Level_Load, then Evt_InitTimers 0x441caf)
 func (w *World) enter() {
 	w.S.deferredNPC = 0
+	w.generateChests()
 	w.vm.MapReload()
 	var last clock.Time
 	if dl := w.delta(); dl != nil {
@@ -691,14 +692,12 @@ func (w *World) ToggleChestFlag(chest int32, bit uint16, on bool) {
 	if dl == nil || chest < 0 || chest >= 20 || int(chest) >= len(dl.Chests) {
 		return
 	}
-	c := dl.Chests[chest]
-	f := binary.LittleEndian.Uint16(c[2:])
+	c := &dl.Chests[chest]
 	if on {
-		f |= bit
+		c.Flags |= bit
 	} else {
-		f &^= bit
+		c.Flags &^= bit
 	}
-	binary.LittleEndian.PutUint16(c[2:], f)
 }
 
 // PartyBuff implements evt.Host: fly (7) is the debug toggle; the rest is M9's.

@@ -42,6 +42,12 @@ type Classes struct {
 	// EquipSlot is the slot an equip type goes to (0x4f9ee0; rings take the first free
 	// of 10..15).
 	EquipSlot [13]uint8
+	// SkillMax is the highest rank (1 normal .. 4 grandmaster) each class can reach in
+	// each skill (0x4ffd24, [class][skill]).
+	SkillMax [NumClasses][NumSkills]uint8
+	// EnchantSpecial is the special bonus the weapon potions Flaming, Freezing, Noxious,
+	// Shocking and Swift give (0x4f541c, indexed by item id from 0xf6).
+	EnchantSpecial [5]int32
 }
 
 // Exe addresses of the class tables.
@@ -58,6 +64,8 @@ const (
 	vaBonusLimits   = 0x5000b4
 	vaBonus         = 0x5000f0
 	vaEquipSlot     = 0x4f9ee0
+	vaSkillMax      = 0x4ffd24
+	vaEnchantSpc    = 0x4f541c + 0xf6*4
 	numBonusLimits  = (vaBonus - vaBonusLimits) / 2
 	numCondPctConds = 19
 )
@@ -65,7 +73,7 @@ const (
 // ReadClasses reads the class tables from the executable.
 //
 // mm8: 0x48f5b9 (MaxHP), 0x48f61d (MaxSP), 0x48fd62 (condition %), 0x48fd79 (age %),
-// 0x48fda7 (StatToBonus), 0x492094 (creation), 0x492d41 (equip slots)
+// 0x48fda7 (StatToBonus), 0x492094 (creation), 0x492d41 (equip slots), 0x417795 (skill max)
 func ReadClasses(im *exe.Image) (*Classes, error) {
 	c := &Classes{}
 	read := func(va uint32, dst []byte) error {
@@ -103,6 +111,17 @@ func ReadClasses(im *exe.Image) (*Classes, error) {
 	for i := range c.Skills {
 		copy(c.Skills[i][:], b[i*NumSkills:])
 	}
+	if b, err = im.Read(vaSkillMax, NumClasses*NumSkills); err != nil {
+		return nil, err
+	}
+	for i := range c.SkillMax {
+		copy(c.SkillMax[i][:], b[i*NumSkills:])
+	}
+	sp, err := im.Int32s(vaEnchantSpc, len(c.EnchantSpecial))
+	if err != nil {
+		return nil, err
+	}
+	copy(c.EnchantSpecial[:], sp)
 	if b, err = im.Read(vaCondPct, 7*numCondPctConds); err != nil {
 		return nil, err
 	}
@@ -179,4 +198,26 @@ func (c *Classes) ClassSkill(class, skill int) uint8 {
 		return 0
 	}
 	return c.Skills[class/2][skill]
+}
+
+// RankColor is the colour a skill's rank line takes in its description: white when the
+// class reaches it; for a class that is not promoted yet (even), yellow when its promotion
+// does; red when neither does.
+//
+// mm8: 0x417795 (Skill_RankColor: returns the Color16 of white, yellow or red)
+func (c *Classes) RankColor(class, skill, rank int) (white, yellow, red bool) {
+	if class < 0 || class >= NumClasses || skill < 0 || skill >= NumSkills {
+		return
+	}
+	limit, inPromotion := int(c.SkillMax[class][skill]), false
+	if class%2 == 0 {
+		if rank <= limit {
+			return true, false, false
+		}
+		limit, inPromotion = int(c.SkillMax[class+1][skill]), true
+	}
+	if limit < rank {
+		return false, false, true
+	}
+	return !inPromotion, inPromotion, false
 }

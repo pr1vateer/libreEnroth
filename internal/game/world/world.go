@@ -31,6 +31,8 @@ type Tables struct {
 	Global   *evt.Script // global.evt
 	// Game are the house, NPC and dialogue tables (tables.Load).
 	Game *tables.All
+	// Chests are the chest grids, pictures and treasure levels (tables.LoadChests).
+	Chests *tables.Chests
 }
 
 // HouseName is the name of 2DEvents house id, "" if none.
@@ -77,7 +79,26 @@ func LoadTables(d *assets.Data) (*Tables, error) {
 	if err == nil {
 		t.Game, err = tables.Load(d)
 	}
+	if err == nil {
+		t.Chests, err = tables.LoadChests(d)
+	}
 	return t, err
+}
+
+// MapStat is column col of the map's MapStats.txt row as a number (0 when absent): 9
+// the trap level (+0x2d), 11 the treasure level (+0x2f).
+//
+// mm8: 0x452a82 (Txt_LoadMapStats)
+func (t *Tables) MapStat(name string, col int) int {
+	if t.MapStats == nil {
+		return 0
+	}
+	for _, row := range t.MapStats.Rows {
+		if len(row) > col && len(row) > 2 && strings.EqualFold(row[2], name) {
+			return int(txt.Atoi(row[col]))
+		}
+	}
+	return 0
 }
 
 // MapIndex is the row number of a map in MapStats.txt (0 when absent).
@@ -133,6 +154,8 @@ type World struct {
 	r                      render.Renderer
 	cam                    render.Camera
 	subTicks               int
+	// openChest is the chest an OpenChest event opened, until the screen closes.
+	openChest *ui.ChestView
 }
 
 var _ ui.World = (*World)(nil)

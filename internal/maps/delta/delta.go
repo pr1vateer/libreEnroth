@@ -19,6 +19,7 @@ package delta
 import (
 	"fmt"
 
+	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/maps/binread"
 )
 
@@ -77,8 +78,8 @@ const (
 	DoorOpening = 3 // moving back at OpenSpeed
 )
 
-// Delta is a parsed .ddm/.dlv. The actor/object/chest records stay raw until the
-// milestones that use them.
+// Delta is a parsed .ddm/.dlv. The actor and object records stay raw until the
+// milestones that use them (M8).
 type Delta struct {
 	Header    [0x28]byte
 	Revealed  []byte
@@ -86,7 +87,7 @@ type Delta struct {
 	DecFlags  []uint16
 	Actors    [][]byte
 	Objects   [][]byte
-	Chests    [][]byte
+	Chests    []items.Chest
 	Doors     []Door // .dlv only
 	Vars      [200]byte
 	Time      [0x38]byte
@@ -126,7 +127,9 @@ func Parse(b []byte, kind Kind, numFaces, numDecs int, ddataSize int32) (*Delta,
 	}
 	d.Actors = records("actors", ActorSize, MaxActors)
 	d.Objects = records("objects", ObjectSize, MaxObjects)
-	d.Chests = records("chests", ChestSize, MaxChests)
+	for _, b := range records("chests", ChestSize, MaxChests) {
+		d.Chests = append(d.Chests, items.DecodeChest(b))
+	}
 	if kind == DLV {
 		recs := make([]binread.Rec, NumDoors)
 		for i := range recs {

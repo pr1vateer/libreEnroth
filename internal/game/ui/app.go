@@ -152,9 +152,17 @@ func (a *App) Draw(c *gfx.Canvas) {
 	c.Clear()
 	a.screen.Draw(c)
 	c.ResetClip()
-	if a.ShowCursor {
-		c.BlitKeyed(a.cursor, a.mx, a.my)
+	if !a.ShowCursor {
+		return
 	}
+	if it := a.r.Party.MouseItem; it.Number != 0 {
+		// An item on the cursor is the cursor (Mouse_SetCursor with its picture).
+		if t, err := a.r.Items(); err == nil {
+			c.BlitKeyed(a.r.dialogIcon(t.Item(it.Number).Picture), a.mx, a.my)
+			return
+		}
+	}
+	c.BlitKeyed(a.cursor, a.mx, a.my)
 }
 
 // World is the map the in-game screen shows, or nil.

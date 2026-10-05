@@ -111,3 +111,73 @@ func TestClassesData(t *testing.T) {
 		t.Errorf("knight sword %d", c.ClassSkill(4, 1))
 	}
 }
+
+// TestPotionData checks potion.txt and potnotes.txt: every row read, the recipes and
+// explosions in the cells, the autonotes.
+func TestPotionData(t *testing.T) {
+	a, _ := load(t)
+	p, n := a.Items.Potion, a.Items.PotNotes
+	if p.At(ItemCureWoundsID, ItemMagicPotionID) != 226 || p.At(ItemMagicPotionID, ItemCureWoundsID) != 226 ||
+		p.At(0xe0, 0xde) != 225 || p.At(0xe4, 0xdf) != 1 || p.At(0xde, 0xde) != 0 {
+		t.Errorf("potion cells %d %d %d %d %d", p.At(0xde, 0xdf), p.At(0xdf, 0xde), p.At(0xe0, 0xde), p.At(0xe4, 0xdf), p.At(0xde, 0xde))
+	}
+	if p.At(0x10f, 0xde) != 4 || p.At(0x10f, 0x10f) != 0 {
+		t.Errorf("Rejuvenation row: %d %d", p.At(0x10f, 0xde), p.At(0x10f, 0x10f))
+	}
+	if n.At(0xde, 0xdf) != 58 || n.At(0xdf, 0xde) != 58 || n.At(0xe0, 0xe1) == 0 {
+		t.Errorf("potnotes %d %d", n.At(0xde, 0xdf), n.At(0xdf, 0xde))
+	}
+	// Every result is an explosion 1..4 or a potion.
+	for i := range p {
+		for j, v := range p[i] {
+			if v != 0 && (v < 1 || v > 4) && (v < 0xdd || v > 0x10f) {
+				t.Errorf("cell [%d][%d] = %d", i, j, v)
+			}
+		}
+	}
+	if a.Classes.EnchantSpecial != [5]int32{11, 5, 13, 7, 59} {
+		t.Errorf("enchant specials %v", a.Classes.EnchantSpecial)
+	}
+	if a.Classes.SkillMax[4][1] != 3 || a.Classes.SkillMax[5][1] != 4 {
+		t.Errorf("knight sword ranks %d / %d", a.Classes.SkillMax[4][1], a.Classes.SkillMax[5][1])
+	}
+	if len(a.Scrolls) != NumScrolls || a.Scrolls[0] == "" {
+		t.Errorf("%d scrolls, first %q", len(a.Scrolls), a.Scrolls[0])
+	}
+}
+
+// Potion ids the data test names.
+const (
+	ItemCureWoundsID  = 0xde
+	ItemMagicPotionID = 0xdf
+)
+
+// TestChestData checks the chest grids, the treasure levels and dchest.bin.
+func TestChestData(t *testing.T) {
+	_, d := load(t)
+	c, err := LoadChests(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, g := range c.Grid {
+		if g.W != 9 || g.H != 9 || g.X < 0 || g.Y < 0 {
+			t.Errorf("chest type %d grid %+v", k, g)
+		}
+	}
+	if c.Grid[0] != (ChestGrid{42, 49, 9, 9}) || c.Grid[1] != (ChestGrid{18, 45, 9, 9}) {
+		t.Errorf("grids %+v %+v", c.Grid[0], c.Grid[1])
+	}
+	if len(c.Pictures) != 8 || c.Picture(0) != 1 || c.Picture(7) != 8 {
+		t.Errorf("pictures %v", c.Pictures)
+	}
+	for n := range c.Treasure {
+		for l, r := range c.Treasure[n] {
+			if r[0] < 1 || r[0] > r[1] || r[1] > 7 {
+				t.Errorf("treasure -%d at level %d: %v", n+1, l, r)
+			}
+		}
+	}
+	if c.Treasure[0][0] != [2]uint8{1, 1} || c.Treasure[6][6] != [2]uint8{7, 7} {
+		t.Errorf("treasure corners %v %v", c.Treasure[0][0], c.Treasure[6][6])
+	}
+}

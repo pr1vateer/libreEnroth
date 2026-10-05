@@ -124,6 +124,10 @@ type partyCreate struct {
 	statLbl, statValLbl     [7]*Label
 	classSkillLbl, extraLbl [2]*Label
 	choiceLbl               [9]*Label
+
+	// failTicks counts down the "cannot be completed" box (g_statusUntil: 4 s).
+	failTicks int
+	art       *popupArt
 }
 
 // newPartyCreate builds the creation screen.
@@ -132,8 +136,9 @@ type partyCreate struct {
 func newPartyCreate(r *Resources) (*partyCreate, error) {
 	l := &loader{r: r}
 	p := &partyCreate{r: r, bg: l.pcx("makeme.pcx"), selring: l.icon("selring", false)}
+	p.art = loadPopupArt(l)
 
-	// Buttons, in Build order (which is also the event order).
+	// Buttons, in Build order (events go to the last added first).
 	add := func(b *Button, hotkey Key) {
 		b.Hotkey = hotkey
 		p.ct.Add(b)
@@ -312,9 +317,8 @@ func (p *partyCreate) Face() int { return p.hero.Face }
 // Hero is the character being made.
 func (p *partyCreate) Hero() *party.Player { return &p.hero }
 
-// done reports the character complete: every point spent and two skills chosen. (The
-// original shows global.txt 412 for 4 s in a pop-up box otherwise; that box comes with
-// M7b's pop-ups.)
+// done reports the character complete: every point spent and two skills chosen (else
+// Update shows global.txt 412 for 4 s).
 //
 // mm8: 0x433bbd (msg 0x42: PartyCreate_PointsLeft() == 0 && HasTwoExtraSkills())
 func (p *partyCreate) done() bool {
@@ -322,6 +326,9 @@ func (p *partyCreate) done() bool {
 }
 
 func (p *partyCreate) Update(in *Input) Transition {
+	if p.failTicks > 0 {
+		p.failTicks--
+	}
 	p.name.Type(in)
 	p.ct.Update(in)
 	for _, m := range p.ct.Queue.Drain() {
@@ -361,6 +368,8 @@ func (p *partyCreate) Update(in *Input) Transition {
 			p.reset()
 		case msgCreateOK:
 			if !p.done() {
+				// mm8: 0x433bbd (g_statusUntil = GetTickCount() + 4000)
+				p.failTicks = 240
 				continue
 			}
 			// The hero becomes member 1 (level 1, as roster.txt's row 0 has it); any
@@ -414,4 +423,8 @@ func (p *partyCreate) Draw(c *gfx.Canvas) {
 	}
 	c.BlitKeyed(p.lhand[p.hero.Face], int(p.lhandOff[2*pose])+bx, int(p.lhandOff[2*pose+1])+by)
 	c.BlitKeyed(p.rhand[p.hero.Face], int(p.rhandOff[4*pose])+bx, int(p.rhandOff[4*pose+1])+by)
+	if p.failTicks > 0 {
+		// mm8: 0x4c7726 (Popup_DrawBox({0xaa, 0x8c, 0x12c, 0x64, text globalTxt[412]}, 0))
+		p.art.draw(c, &popupBox{X: 0xaa, Y: 0x8c, W: 0x12c, H: 0x64, Text: p.r.GlobalText(412)}, 0)
+	}
 }

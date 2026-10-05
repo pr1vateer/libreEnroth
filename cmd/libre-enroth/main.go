@@ -3,12 +3,13 @@
 //	libre-enroth [-data dir] [-res WxH|auto] [-window WxH] [-fullscreen] [-filter sharp|nearest|linear]
 //	             [-state title|credits|create|ingame] [-map name.odm|name.blv] [-cam x,y,z,yaw,pitch]
 //	             [-time HH:MM] [-screenshot out.png -frames N] [-mouse x,y] [-input script] [-freecam]
-//	             [-party face,face,...] [-event N] [-house N] [-npc N]
+//	             [-party face,face,...] [-equip] [-event N] [-house N] [-npc N]
 //
 // In game, the original's default keys: Up/Down walk, Left/Right turn (Ctrl: strafe),
 // [ and ] strafe, Shift runs (U toggles always-run), X jumps, PgDn/Delete/End look
 // up/down/ahead, PgUp/Insert fly up/down and Home lands (with the fly buff).
-// 1-5 or a click on a portrait selects a party member. A click in the view or Space
+// 1-5 or a click on a portrait selects a party member, the selected one again opens the
+// character screen (S, K, I, A pages; Esc). A click in the view or Space
 // (the object in the middle of the view) runs a door's, lever's or decoration's event.
 // Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking.
 // Free camera: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn pitch,
@@ -35,7 +36,7 @@ import (
 
 const inputHelp = "keys to replay, keys:ticks steps, e.g. Up:120,X:1,Right+Shift:30,-:60; Mouse@x/y and " +
 	"Click@x/y move and click the mouse (UI pixels; a click picks from the last drawn frame, so wait " +
-	"first: -:30,Click@320/200:1)"
+	"first: -:30,Click@320/200:1); Right@x/y holds the right button for the step"
 
 func main() {
 	log.SetFlags(0)
@@ -59,6 +60,7 @@ func main() {
 		eventFlag  = flag.Int("event", 0, "run this map event (of the map's .evt) once the first map is loaded")
 		houseFlag  = flag.Int("house", 0, "open this 2DEvents house's dialogue once the first map is loaded")
 		npcFlag    = flag.Int("npc", 0, "open this NPC's dialogue once the first map is loaded")
+		equipFlag  = flag.Bool("equip", false, "give the party the items of their skills, worn where they fit (debug)")
 	)
 	flag.Parse()
 
@@ -157,6 +159,11 @@ func main() {
 				return nil, err
 			}
 			sess.SetTimeOfDay(hour, minute) // -time: the hour of the first day
+			if *equipFlag {
+				for i := range resources.Party.Players {
+					resources.Party.DebugEquip(i, sess.Ctx)
+				}
+			}
 		}
 		w, err := world.Load(data, tables, tex, name, sess)
 		if err != nil {

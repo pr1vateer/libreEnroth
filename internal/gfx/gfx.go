@@ -123,3 +123,52 @@ func (c Color16) RGBA() color.RGBA {
 	b := uint8(c) & 0x1f
 	return color.RGBA{r<<3 | r>>2, g<<2 | g>>4, b<<3 | b>>2, 0xff}
 }
+
+// Mask selects the colour channels a masked blit keeps: the original ANDs each pixel
+// with a surface channel mask to draw broken items red and unidentified ones green.
+type Mask uint8
+
+const (
+	MaskNone  Mask = iota
+	MaskRed        // only the red channel (Screen_DrawTextureRed: the surface's red mask)
+	MaskGreen      // only the green channel (Screen_DrawTextureGreen)
+)
+
+// BlitEx draws s keyed with its top-left corner at x, y, keeping only the channels of
+// mask; rotated draws it turned 90° anticlockwise (s.H wide, s.W high: the source's
+// right column becomes the top row), as the off hand's swords and daggers are.
+//
+// mm8: 0x4a6272 (Screen_DrawTextureKeyed), 0x4a684f (Screen_DrawTextureRed),
+// 0x4a6ae3 (Screen_DrawTextureGreen); their rotate argument
+func (c *Canvas) BlitEx(s *Sprite, x, y int, mask Mask, rotated bool) {
+	if s == nil {
+		return
+	}
+	w, h := s.W, s.H
+	if rotated {
+		w, h = s.H, s.W
+	}
+	dst := image.Rect(x, y, x+w, y+h).Intersect(c.clip)
+	for dy := dst.Min.Y; dy < dst.Max.Y; dy++ {
+		for dx := dst.Min.X; dx < dst.Max.X; dx++ {
+			sx, sy := dx-x, dy-y
+			if rotated {
+				sx, sy = s.W-1-(dy-y), dx-x
+			}
+			i := sy*s.W + sx
+			if s.Key != nil && s.Key[i] {
+				continue
+			}
+			p := s.Pix[4*i : 4*i+4]
+			o := c.Img.PixOffset(dx, dy)
+			r, g, b := p[0], p[1], p[2]
+			switch mask {
+			case MaskRed:
+				g, b = 0, 0
+			case MaskGreen:
+				r, b = 0, 0
+			}
+			c.Img.Pix[o], c.Img.Pix[o+1], c.Img.Pix[o+2], c.Img.Pix[o+3] = r, g, b, 0xff
+		}
+	}
+}

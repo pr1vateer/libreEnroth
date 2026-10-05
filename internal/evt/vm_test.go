@@ -30,6 +30,8 @@ type fakeHost struct {
 	trans  []Transition
 	reply  []string
 	notes  []string
+	chests []int
+	trap   bool // OpenChest reports a trap that went off
 }
 
 func newHost(members int) *fakeHost {
@@ -60,6 +62,7 @@ func (h *fakeHost) SetFacesBit(int32, uint32, bool)     {}
 func (h *fakeHost) SetLight(int32, bool)                {}
 func (h *fakeHost) ChangeEvent(int, int32)              {}
 func (h *fakeHost) ToggleChestFlag(int32, uint16, bool) {}
+func (h *fakeHost) OpenChest(id int) bool               { h.chests = append(h.chests, id); return !h.trap }
 func (h *fakeHost) PartyBuff(int) bool                  { return false }
 func (h *fakeHost) Flying() bool                        { return false }
 func (h *fakeHost) QuestText(int) bool                  { return false }
@@ -456,6 +459,25 @@ func TestTimers(t *testing.T) {
 		tm.Scan(start+c.after, &last, func(id, _ int) { ids = append(ids, id) })
 		if slices.Contains(ids, 3) != c.fires {
 			t.Errorf("weekly long timer %d ticks after the visit: fired %v", c.after, ids)
+		}
+	}
+}
+
+// OpenChest opens the chest and the event goes on; a trap that goes off ends it.
+//
+// mm8: 0x4446bd (case 7: Chest_Open 0x420093)
+func TestOpenChest(t *testing.T) {
+	for _, trap := range []bool{false, true} {
+		h := newHost(1)
+		h.trap = trap
+		vm := &VM{Host: h, Map: script(t,
+			rec(1, 0, OpOpenChest, 3),
+			rec(1, 1, OpSet, varArgs(mapVar(0), 1)...),
+			rec(1, 2, OpExit),
+		)}
+		vm.Run(Source{}, 1, 0, true)
+		if !slices.Equal(h.chests, []int{3}) || (h.vars[0] == 1) == trap {
+			t.Errorf("trap %v: chests %v, the next step ran: %v", trap, h.chests, h.vars[0] == 1)
 		}
 	}
 }

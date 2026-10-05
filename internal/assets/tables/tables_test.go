@@ -1,6 +1,10 @@
 package tables
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestParseHousesSynthetic(t *testing.T) {
 	// Two header lines, then: an Inn (no prefix match), a Spell Shop ("spe" -> 0xe), a
@@ -51,5 +55,35 @@ func TestClassByName(t *testing.T) {
 		if got := ClassByName(s); got != want {
 			t.Errorf("ClassByName(%q) = %d, want %d", s, got, want)
 		}
+	}
+}
+
+// The mixing table's parse: strtok collapses empty cells, the data starts after the
+// second "222", six tokens are skipped per row and "E2" reads 2.
+//
+// mm8: 0x452662 (Txt_LoadPotion)
+func TestParseMix(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("\tName\r\n220\tBottle\t\t\t\t222\t223\r\n")
+	for r := 0; r < NumMixPotions; r++ {
+		fmt.Fprintf(&b, "%d\tName\tColour\tEffect\t1\t0\t0", 222+r)
+		for c := 0; c < NumMixPotions; c++ {
+			switch {
+			case r == 0 && c == 1:
+				b.WriteString("\t226")
+			case r == 6 && c == 1:
+				b.WriteString("\tE2")
+			default:
+				b.WriteString("\tno")
+			}
+		}
+		b.WriteString("\r\n")
+	}
+	m := parseMix([]byte(b.String()))
+	if m.At(0xde, 0xdf) != 226 || m.At(0xe4, 0xdf) != 2 || m.At(0xdf, 0xde) != 0 || m.At(0xdd, 0xde) != 0 {
+		t.Errorf("cells %d %d %d", m.At(0xde, 0xdf), m.At(0xe4, 0xdf), m.At(0xdf, 0xde))
+	}
+	if parseMix([]byte("no table")).At(0xde, 0xdf) != 0 {
+		t.Error("a file without the table read something")
 	}
 }

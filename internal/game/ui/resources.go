@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strings"
 
 	"libre-enroth/internal/assets"
@@ -41,6 +42,9 @@ type Resources struct {
 	dialogArt *dialogArt
 	vids      vid.Set
 	vidErr    error
+	noted     map[string]bool
+	scrolls   []string
+	awards    []tables.Award
 
 	// StartMap is the map a new game begins on.
 	//
@@ -309,4 +313,58 @@ func (l *loader) classes() *tables.Classes {
 		c = &tables.Classes{}
 	}
 	return c
+}
+
+// dialogIcon loads an icons.lod picture, PENDING when it is not there (as
+// TexLod_LoadTexture falls back), nil when even that is missing.
+//
+// mm8: 0x411278 (TexLod_LoadTexture)
+func (r *Resources) dialogIcon(name string) *gfx.Sprite {
+	if s, err := r.Cache.Icon(name, false); err == nil {
+		return s
+	}
+	s, _ := r.Cache.Icon("PENDING", false)
+	return s
+}
+
+// note logs what a later milestone does, once per key.
+func (r *Resources) note(key, what string) {
+	if r.noted == nil {
+		r.noted = map[string]bool{}
+	}
+	if !r.noted[key] {
+		r.noted[key] = true
+		log.Printf("%s", what)
+	}
+}
+
+// ScrollText is message scroll n's text (scroll.txt; items 700 + n), "" when unknown.
+//
+// mm8: 0x761400 (Txt_LoadScroll 0x476fee)
+func (r *Resources) ScrollText(n int) string {
+	if r.scrolls == nil {
+		raw, err := r.Cache.Text("scroll.txt")
+		if err != nil {
+			return ""
+		}
+		r.scrolls = tables.ParseScrolls(raw)
+	}
+	if n < 0 || n >= len(r.scrolls) {
+		return ""
+	}
+	return r.scrolls[n]
+}
+
+// Awards is awards.txt (the character screen's awards page).
+//
+// mm8: 0x476f0a (Txt_LoadAwards, g_awards 0x761548)
+func (r *Resources) Awards() []tables.Award {
+	if r.awards == nil {
+		raw, err := r.Cache.Text("awards.txt")
+		if err != nil {
+			return nil
+		}
+		r.awards = tables.ParseAwards(raw)
+	}
+	return r.awards
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/party"
 	"os"
 	"path/filepath"
@@ -160,6 +161,9 @@ var worldHashes = map[string]string{
 	"house_stables":  "68d89186417c3af826de4f2f42d5801a51f2147271ba40a3e077439f78c0f27f",
 	"transition_d05": "028f4f90d84a1ba719c2cddfd5ad5fc0ca93dca83613606ff25e3553c28e69b1",
 	"edge_out02":     "d721897ec89a68958b95ffaf071f81dd956457a0b56154ef72a7efc4645384c8",
+	// M7b
+	"chest_open":  "f9751353f2a27291b1e08921747506024e4a678440d31e4439ee6b6a49b687cb",
+	"chest_popup": "ad0b5dd556614b88d8f6675b63540ebb1f424285004b4c2f83bbabf22228b4f6",
 }
 
 var views = []view{
@@ -217,6 +221,16 @@ var views = []view{
 	// M6c: walking north off Ravenshore.
 	{name: "edge_out02", mapName: "out02.odm", party: &FreeCam{X: 0, Y: 0x5700, Z: 2000, Yaw: 512},
 		click: "Up:150,Mouse@300/300:2", w: 640, h: 480, hour: 9},
+	// M7b: d05's chest 1, its trap disarmed (event 82 opens it), the mouse off the items.
+	{name: "chest_open", mapName: "d05.blv", setup: func(w *World) {
+		w.chests()[1].Flags &^= items.ChestTrapped
+		w.RunEvent(82, true)
+	}, click: "Mouse@600/300:2", w: 640, h: 480},
+	// M7b: the same, the right button held on the light crossbow.
+	{name: "chest_popup", mapName: "d05.blv", setup: func(w *World) {
+		w.chests()[1].Flags &^= items.ChestTrapped
+		w.RunEvent(82, true)
+	}, click: "Mouse@600/300:2,Right@300/120:2", w: 640, h: 480},
 }
 
 func TestGolden(t *testing.T) {
