@@ -5,12 +5,13 @@ A reimplementation of the *Might and Magic VIII: Day of the Destroyer* engine in
 from your own copy of the game (for example the GOG release). No game data is included in this
 repository.
 
-Status: milestone M6. You get the title screen, credits, character creation and the in-game
+Status: milestone M7. You get the title screen, credits, character creation and the in-game
 screen. The party walks, jumps and flies through every outdoor (`.odm`) and indoor (`.blv`) map,
 drawn by a software renderer that reproduces the original's Direct3D look. Time passes, the
 party rests, and the map scripts run: doors, clicks, NPC dialogues and houses with their clips.
 Taverns, temples, banks, stables and boats work, as do dungeon entrances and walking off the
-edge of a map to the next one. Items, skills and stats (shops, training), monsters, combat,
+edge of a map to the next one. Stats, the character screen and inventory, chests, potions,
+shops and guild shelves work too; training and learning skills don't yet. Monsters, combat,
 spells, saving and sound are later milestones. "New Game" → OK starts on `out01.odm`.
 See `PLAN.md` in the parent repository for the roadmap.
 
@@ -81,9 +82,14 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - The arrows next to "Portrait" change the face and, with it, the class.
   - **Enter** = OK, **Esc** = Cancel, **C** = Clear.
   - **+/−** beside a stat spend or return points; click two of the offered skills.
-- **In game** (free camera; M4 brings real party movement):
-  - **W/S** or **↑/↓** move, **A/D** strafe, **←/→** turn, **PgUp/PgDn** look up/down.
-  - **Space/C** fly up/down, **Shift** moves 4× faster, right-drag looks around.
+- **In game** (the original's default keys):
+  - **↑/↓** move, **←/→** turn (with **Ctrl**, or **[ / ]**, they strafe), **Shift** runs,
+    **X** jumps.
+  - **PgUp/Insert** fly up/down, **Home** lands, **PgDn/Delete** look up/down, **End**
+    centres the view.
+  - **Space** interacts, **R** rests, **Enter** toggles turn-based mode.
+  - **F3** switches to the old free camera (**W/S/A/D**, **Space/C** up and down, **Shift**
+    faster, right-drag looks around); **F4/F5** toggle flying and water walking.
   - **F2** (indoors) opens every closed door and closes every open one.
   - **+/−** next to the minimap zoom it (outdoors).
   - **1–5** or a click on a portrait selects a party member; the selected member again
@@ -108,13 +114,13 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
 | `-screenshot out.png -frames N` | render N frames, save the last one as PNG, and exit |
 | `-mouse x,y` | pin the mouse at a UI position (0..639, 0..479), e.g. to capture hover states |
 | `-map name` | start in game on a `games.lod` map, e.g. `out01.odm`, `out02.odm`, `d05.blv`, `eleme.blv` (implies `-state ingame`) |
-| `-cam x,y,z,yaw,pitch` | camera position (z of the feet; the eye is 160 higher) and angles in 2048ths of a turn (0 = east, 512 = north) |
+| `-cam x,y,z,yaw,pitch` | party position, or the free camera's with `-freecam` (z of the feet; the eye is 160 higher) and angles in 2048ths of a turn (0 = east, 512 = north) |
 | `-time HH:MM` | time of day for the outdoor lighting (default 9:00) |
 | `-party 0,5,12` | a party of 1–5 portrait faces (0–27, as in party creation); a created hero replaces the first. Default: one member with face 0 |
 | `-equip` | give the party the items of their skills, worn where they fit (debug) |
 | `-input script` | replay keys and mouse: `Up:120,1:2,Click@320/200:1,Right@40/60:5,-:30` (`Right@x/y` holds the right button) |
 
-Outdoors the camera starts at the new-game spawn for `out01.odm`, elsewhere above the map
+Outdoors the party starts at the new-game spawn for `out01.odm`, elsewhere above the map
 centre. Indoors it starts on the map's "Party Start" marker.
 
 Screenshots also work without a display, through Xvfb:
@@ -170,7 +176,3 @@ go run ./cmd/lodtool x   ../games_mm8/Data/EnglishT.lod global.txt -o out
 | `internal/display` | render resolution ↔ UI coordinate mapping |
 | `internal/game/ui` | widgets and screens (title, credits, character creation, HUD) |
 | `internal/engine` | Ebitengine glue: input, scaling, screenshots |
-
-Code ported from game logic carries a `// mm8: 0x…` comment with the address of the original
-function in `MM8-Rel.exe`. The reverse-engineering notes those come from live in the parent
-repository (`re/notes/`).
