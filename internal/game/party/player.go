@@ -278,6 +278,8 @@ type Members struct {
 	// the stats. CharMagnify is its jewellery view (g_charMagnify 0x522f9c).
 	CharPage    int
 	CharMagnify bool
+	// Shops are the shops' and guilds' stock (nil until a shop is visited).
+	Shops *Shops
 }
 
 // Quest and autonote bit array sizes (Party +0x77f..+0x7cf, +0x818..+0x897).

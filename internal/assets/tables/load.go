@@ -23,6 +23,7 @@ type All struct {
 	Scrolls    []string // scroll.txt
 	Roster     []RosterEntry
 	Travel     *Travel
+	Shops      *Shops
 	// Items are the item tables and the descriptions loaded with them; Classes the class
 	// and stat tables of the executable.
 	Items   *Items
@@ -68,6 +69,9 @@ func Load(d *assets.Data) (*All, error) {
 		return nil, err
 	}
 	if a.Travel, err = ReadTravel(d.Exe); err != nil {
+		return nil, err
+	}
+	if a.Shops, err = ReadShops(d.Exe); err != nil {
 		return nil, err
 	}
 	return a, nil

@@ -128,8 +128,11 @@ type Dialog struct {
 	// Closed is set when a click left the house (a room for the night, a journey, the
 	// exit portrait); RestInn when the inn's rest follows (msg 0x199).
 	Closed, RestInn bool
-	// Traded is set by a deposit or withdrawal (0xffd34c: the leaving sound, M11).
+	// Traded is set by a deposit or withdrawal, a purchase, a sale, ... (0xffd34c: the
+	// leaving sound, M11).
 	Traded bool
+	// ShelfY is how far down the weapon shop's table each weapon lies (0xffd2bc).
+	ShelfY [tables.ShopSlots]int
 
 	keepReply bool                        // 0xffd344: "Party is full!" survives the back step
 	donations [party.MaxMembers + 1]uint8 // 0xffd35c: the temple's count per member
@@ -570,9 +573,11 @@ func (d *Dialog) Back() bool {
 	case SvcArcomageRules, SvcArcomageVictory, SvcArcomagePlay:
 		d.Menu = SvcArcomage
 		d.Buttons = arcomageMenu()
+	case SvcSell, SvcIdentify, SvcRepair:
+		d.Menu = SvcDisplay
+		d.Buttons = displayMenu(d.Type)
 	default:
-		// The other sub-menus step back to the main menu (the shops' sell, identify and
-		// repair to their display, M7).
+		// The other sub-menus step back to the main menu.
 		d.Menu = 1
 		d.Buttons = ServiceMenu(d.Type, d.h.Members())
 	}

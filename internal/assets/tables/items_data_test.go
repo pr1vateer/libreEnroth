@@ -15,7 +15,7 @@ func TestItemsData(t *testing.T) {
 	if got := it.Item(802).Name; got != "Ball of Dunduck" {
 		t.Errorf("item 802 = %q", got)
 	}
-	// Every item with a picture has its icon in icons.lod.
+	// Every item with a picture has its icon in icons.lod, and its size in pixels.
 	for id := 1; id < NumItems; id++ {
 		p := it.Items[id].Picture
 		if p == "" || p == "null" {
@@ -23,6 +23,9 @@ func TestItemsData(t *testing.T) {
 		}
 		if _, ok := d.Icons.Find(p); !ok {
 			t.Errorf("item %d: icon %q missing", id, p)
+		}
+		if def := &it.Items[id]; def.PicW <= 0 || def.PicH <= 0 || Cells(def.PicW) != def.W || Cells(def.PicH) != def.H {
+			t.Errorf("item %d: picture %dx%d, %dx%d cells", id, def.PicW, def.PicH, def.W, def.H)
 		}
 	}
 	// Special materials resolve their VarA to a bonus.

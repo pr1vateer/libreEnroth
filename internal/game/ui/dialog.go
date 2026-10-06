@@ -228,6 +228,12 @@ type dialogScreen struct {
 	portHits []image.Rectangle
 	msg      *messageBox
 	ticks    int
+	// The shops: their art, the pick buffer the shelves and the pack write (clicks read
+	// the last frame's), the mouse, and the right button.
+	shop                 *shopArt
+	pick                 pickBuffer
+	mx, my               int
+	rightHeld, speakOnce bool
 }
 
 func newDialogScreen(r *Resources, w Dialogs, d *dialog.Dialog) (*dialogScreen, error) {
@@ -239,6 +245,9 @@ func newDialogScreen(r *Resources, w Dialogs, d *dialog.Dialog) (*dialogScreen, 
 	l := &loader{r: r}
 	s.px = l.exeInts(vaPortraitX, 36)
 	s.py = l.exeInts(vaPortraitY, 36)
+	if t, err := r.Items(); err == nil && d.Kind == dialog.KindHouse && d.Shops() != nil {
+		s.shop = loadShopArt(l, t)
+	}
 	if l.err != nil {
 		return nil, l.err
 	}
@@ -272,8 +281,11 @@ func (s *dialogScreen) update(in *Input) (closed bool) {
 	}
 	s.layout()
 	s.hover = topicAt(s.spots, in.X, in.Y)
+	s.mx, s.my = in.X, in.Y
+	s.updateRight(in)
 	if in.LeftPressed {
 		switch {
+		case d.Kind == dialog.KindHouse && s.clickPortrait(in):
 		case s.hover >= 0:
 			b := s.spots[s.hover].b
 			d.Click(b)
@@ -288,6 +300,7 @@ func (s *dialogScreen) update(in *Input) (closed bool) {
 					break
 				}
 			}
+		case s.shop != nil && s.clickArea(in):
 		case hit(exitButton, in.X, in.Y) && (d.Kind == dialog.KindNPC || d.Sel != 0):
 			if !s.back() {
 				return true
@@ -344,6 +357,7 @@ func (s *dialogScreen) back() bool {
 //
 // mm8: 0x443441 (NPC dialogue), 0x4b3dec (house)
 func (s *dialogScreen) draw(c *gfx.Canvas) {
+	s.pick.clear()
 	if s.d.Kind == dialog.KindNPC {
 		s.drawNPC(c)
 	} else {

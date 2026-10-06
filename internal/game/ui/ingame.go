@@ -579,4 +579,7 @@ func (g *inGame) Draw(c *gfx.Canvas) {
 	}
 	g.r.Status.Draw(c, g.lucida)
 	g.portraits.draw(c) // the portrait panel is the last child
+	if g.dialog != nil && g.dialog.shop != nil && g.message == nil {
+		g.dialog.drawOver(c, &g.lastIn)
+	}
 }

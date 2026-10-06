@@ -113,10 +113,6 @@ func deferred(typ, code int) string {
 		return "the bounty hunt (0x4bd028 code 99, the monsters: M8)"
 	case code == SvcLearn || code >= 0x24 && code <= 0x4a:
 		return "learning skills (0x4b43ce, M7)"
-	case code >= SvcBuyStandard && code <= SvcRepair, code == SvcDisplay, code == SvcBuySpecial:
-		return "shops (0x4b9820, 0x4b99e4, 0x4b4900, M7)"
-	case code >= SvcGuild0 && code <= SvcGuild0+8:
-		return "the guilds' spell shelves (M7)"
 	case code == SvcArcomagePlay:
 		return "Arcomage (msg 0x1d, M12)"
 	}
@@ -168,6 +164,19 @@ func (d *Dialog) BlockedText() string {
 	return cfmt(d.h.Global(0x1ab), p.Name, d.h.Global(0x232))
 }
 
+// buttonsBlocked reports a menu whose draw found the selected member unable to act
+// (House_CheckCanAct zeroes the window's keyCount): the main menu, and a shop's
+// shelves, Sell, Identify and Repair (whose buttons stay from Display Inventory).
+func (d *Dialog) buttonsBlocked() bool {
+	switch {
+	case d.Menu == 1:
+	case d.IsShop() && (d.ShelfMenu() || d.PackMenu() && d.Menu != SvcDisplay):
+	default:
+		return false
+	}
+	return d.Blocked()
+}
+
 // service is a proprietor's button (msg 0x195): in the main menu it opens the
 // sub-menu (the topic buttons go), a training the member is not ready for and a heal
 // the member does not need excepted; the bank's and the town hall's sub-menus open the
@@ -178,7 +187,7 @@ func (d *Dialog) BlockedText() string {
 // mm8: 0x4bd028 (House_ClickService), the per-type draws 0x4b7cf2 (temple), 0x4b8cde
 // (tavern), 0x4b87ec (bank), 0x4b78c9 (stables and boats), 0x4b8364 (town hall)
 func (d *Dialog) service(code int) {
-	if len(d.Buttons) == 0 || d.Menu == 1 && d.Blocked() {
+	if len(d.Buttons) == 0 || d.buttonsBlocked() {
 		return
 	}
 	if d.Menu == 1 {
@@ -226,6 +235,18 @@ func (d *Dialog) service(code int) {
 		}
 	}
 	switch code {
+	case SvcBuyStandard, SvcBuySpecial:
+		if d.IsShop() {
+			d.restockShop()
+			d.rollShelfY()
+		}
+	case SvcSell, SvcIdentify, SvcRepair:
+		if d.IsShop() {
+			d.Menu = code
+			d.h.Members().DropMouseItem(d.h.Ctx().Items)
+		}
+	case SvcDisplay:
+		d.Buttons = displayMenu(d.Type)
 	case SvcArcomage:
 		d.Buttons = arcomageMenu()
 	case SvcArcomageRules, SvcArcomageVictory:
@@ -236,17 +257,11 @@ func (d *Dialog) service(code int) {
 		if d.Menu != SvcArcomagePlay {
 			d.h.Note(deferred(d.Type, code))
 		}
+	default:
+		if code >= SvcGuild0 && code <= SvcGuild0+8 {
+			d.restockGuild()
+		}
 	}
-}
-
-// Merchant is the price a member pays: less their merchant discount, at least a third
-// of it. The discount (the merchant skill and items) is M7's; it is 0 now.
-//
-// mm8: 0x4b28ab (with 0x491f5e the discount)
-func Merchant(p *party.Player, price int) int {
-	discount := 0
-	v := (100 - discount) * price / 100
-	return max(v, price/3)
 }
 
 // pay takes price gold, or says "You don't have enough gold".
@@ -357,7 +372,7 @@ func (d *Dialog) donate() {
 func (d *Dialog) RoomPrice() int {
 	v := d.val()
 	sq := v * v // stored as a float; the multiply by 0.1f is x87
-	return max(Merchant(d.selected(), int(float64(sq)*float64(float32(0.1)))), 1)
+	return max(d.merchant(int(float64(sq)*float64(float32(0.1)))), 1)
 }
 
 // FoodPrice is filling the packs: Val³ / 100, merchant-adjusted, at least 1.
@@ -366,7 +381,7 @@ func (d *Dialog) RoomPrice() int {
 func (d *Dialog) FoodPrice() int {
 	v := d.val()
 	f := float64(v * v) // the square is stored as a float, the rest is x87
-	return max(Merchant(d.selected(), int(f*float64(v)*float64(float32(0.01)))), 1)
+	return max(d.merchant(int(f*float64(v)*float64(float32(0.01)))), 1)
 }
 
 // FoodDays is the food the packs are filled to (Val).
@@ -410,7 +425,7 @@ func (d *Dialog) TravelPrice() int {
 	if d.Def.Type == TypeStables {
 		base = 25
 	}
-	return Merchant(d.selected(), int(float64(base)*float64(d.val())))
+	return d.merchant(int(float64(base) * float64(d.val())))
 }
 
 // RouteOffer is a journey a stable or boat offers today.

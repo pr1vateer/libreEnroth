@@ -91,8 +91,10 @@ type ItemDef struct {
 	Strength         int8     // +0x24 MaterialSpecial with StdBonus: its strength
 	Chance           [6]uint8 // +0x28 rnditems: weight per treasure level 1..6
 	IDRepair         uint8    // +0x2e identify and repair difficulty (0: identified when found)
-	// W and H are the item's size in backpack cells, from its icon's size (0x41a904).
-	W, H int
+	// W and H are the item's size in backpack cells, from its icon's size (0x41a904);
+	// PicW and PicH the icon's size in pixels (0 when it is missing).
+	W, H       int
+	PicW, PicH int
 }
 
 // StdBonus is one stditems.txt row (0x14 bytes at 0x5f9174): a standard bonus.
@@ -204,7 +206,9 @@ func ParseItems(files map[string][]byte, icons *lod.Archive) *Items {
 	for i := range t.Items {
 		t.Items[i].W, t.Items[i].H = 1, 1
 		if icons != nil {
-			t.Items[i].W, t.Items[i].H = iconCells(icons, t.Items[i].Picture)
+			d := &t.Items[i]
+			d.PicW, d.PicH = iconSize(icons, d.Picture)
+			d.W, d.H = Cells(d.PicW), Cells(d.PicH)
 		}
 	}
 	return t
@@ -454,20 +458,20 @@ func (t *Items) parseDescs(skilldes, stats, class []byte) {
 	}
 }
 
-// iconCells is an item's size in backpack cells: (max(size, 14) - 14) / 32 + 1 of its
-// icon's width and height; an icon that is not there counts as 1×1.
+// iconSize is an item icon's width and height in pixels (0, 0 when it is not there, which
+// Cells counts as 1×1).
 //
 // mm8: 0x492b25 (TexLod_LoadTexture, header +0x18/+0x1a), 0x41a904
-func iconCells(icons *lod.Archive, name string) (w, h int) {
+func iconSize(icons *lod.Archive, name string) (w, h int) {
 	e, ok := icons.Find(name)
 	if name == "" || !ok {
-		return 1, 1
+		return 0, 0
 	}
 	head, err := icons.ReadHead(e, 0x1c)
 	if err != nil || len(head) < 0x1c {
-		return 1, 1
+		return 0, 0
 	}
-	return Cells(int(int16(binary.LittleEndian.Uint16(head[0x18:])))), Cells(int(int16(binary.LittleEndian.Uint16(head[0x1a:]))))
+	return int(int16(binary.LittleEndian.Uint16(head[0x18:]))), int(int16(binary.LittleEndian.Uint16(head[0x1a:])))
 }
 
 // Cells is the number of 32-pixel backpack cells a picture size takes.

@@ -338,15 +338,13 @@ func TestBlocked(t *testing.T) {
 	}
 }
 
-// TestDeferredServices: the shops, skills and training are M7's: the menu stays.
+// TestDeferredServices: learning skills is M7d's: the menu stays.
 func TestDeferredServices(t *testing.T) {
 	h := serviceHost(t)
 	d := openProprietor(t, h, 26)
-	for _, c := range []int{SvcBuyStandard, SvcBuySpecial, SvcDisplay, SvcLearn} {
-		clickService(d, c)
-		if d.Menu != 1 || len(d.Buttons) != 4 {
-			t.Errorf("code %#x opened %#x", c, d.Menu)
-		}
+	clickService(d, SvcLearn)
+	if d.Menu != 1 || len(d.Buttons) != 4 {
+		t.Errorf("learn opened %#x", d.Menu)
 	}
 }
 

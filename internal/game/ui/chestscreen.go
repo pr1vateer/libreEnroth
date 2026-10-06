@@ -281,7 +281,7 @@ func (s *chestScreen) drawPack(c *gfx.Canvas) {
 	c.Blit(s.da.panel, 0x1d5, 0)
 	drawGoldFood(c, s.da.scoreBG, s.da.smallnum, m)
 	c.Blit(s.fr, 0, 0x17)
-	drawPack(c, s.r, s.it, &m.Players[sel], s.doll, &s.pick, 2)
+	drawPack(c, s.r, s.it, &m.Players[sel], s.doll, &s.pick, false, 2)
 }
 
 // drawOver draws the right-click pop-up: the chest item under the mouse, or a pack

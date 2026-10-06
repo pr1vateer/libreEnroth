@@ -981,11 +981,12 @@ func cfmtLu(f string, v uint32) string {
 // mm8: 0x41a914 (CharScreen_DrawInventory, mode 7)
 func (s *charScreen) drawInventory(c *gfx.Canvas) {
 	c.Blit(s.fr[pageInventory], 0, 0x17)
-	drawPack(c, s.r, s.it, s.player(), s.doll, &s.pick, s.dt)
+	drawPack(c, s.r, s.it, s.player(), s.doll, &s.pick, false, s.dt)
 }
 
-// drawPack draws member p's pack items (doll draws them with the sparkle state).
-func drawPack(c *gfx.Canvas, r *Resources, t *tables.Items, p *party.Player, doll *paperDoll, pick *pickBuffer, dt int) {
+// drawPack draws member p's pack items (doll draws them with the sparkle state);
+// unidentified items green when green (in houses, g_screenMode 0xd).
+func drawPack(c *gfx.Canvas, r *Resources, t *tables.Items, p *party.Player, doll *paperDoll, pick *pickBuffer, green bool, dt int) {
 	full := image.Rect(0, 0, gfx.ScreenW, gfx.ScreenH)
 	for cell, n := range p.Grid {
 		if n <= 0 {
@@ -1000,7 +1001,7 @@ func drawPack(c *gfx.Canvas, r *Resources, t *tables.Items, p *party.Player, dol
 		if tables.Cells(pic.W) == 1 && pic.W < 32 {
 			x += (32 - pic.W) / 2
 		}
-		doll.drawItem(c, pic, x, y, it, false, false, dt)
+		doll.drawItem(c, pic, x, y, it, green, false, dt)
 		pick.keyed(pic, x, y, n, false, full)
 	}
 }

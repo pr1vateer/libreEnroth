@@ -164,6 +164,14 @@ var worldHashes = map[string]string{
 	// M7b
 	"chest_open":  "f9751353f2a27291b1e08921747506024e4a678440d31e4439ee6b6a49b687cb",
 	"chest_popup": "ad0b5dd556614b88d8f6675b63540ebb1f424285004b4c2f83bbabf22228b4f6",
+	// M7c
+	"shop_weapon":    "1edfb734fbc565cbde3711965cdd88dba63577eda1b6a4772f20da89d600f61d",
+	"shop_armor":     "f3fc2047589f1fed1ac5db0bdeca20aee228cde83d44de499d5099da468ca2d4",
+	"shop_magic":     "dd25680217e57a57dd4785a37273503ff84eeeaa02f23744483609146722b75a",
+	"shop_alchemist": "1bd05799f63e0b718d40893aff402c929385a48cb64d1eb0fbecb75aada30eae",
+	"guild_shelf":    "c0b0601688374680cf13b0056d15650392c3daf41bcb7c256621d8f39937ef42",
+	"shop_sell":      "04416850a246afb8c77088a7733166d50d3f26ad3713975271d9f1faa36dafb3",
+	"shop_popup":     "fe1595a1d3151d75515f2fa173baa0637e26482614224cdf8991c2759283a185",
 }
 
 var views = []view{
@@ -231,6 +239,34 @@ var views = []view{
 		w.chests()[1].Flags &^= items.ChestTrapped
 		w.RunEvent(82, true)
 	}, click: "Mouse@600/300:2,Right@300/120:2", w: 640, h: 480},
+	// M7c: True Mettle's (1) standard shelf, the mouse on the two-handed axe.
+	{name: "shop_weapon", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(1) },
+		click: "-:2,Click@555/160:1,Mouse@290/150:3", w: 640, h: 480, hour: 9},
+	// M7c: the Tannery's (15) special shelves.
+	{name: "shop_armor", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(15) },
+		click: "-:2,Click@555/197:1,Mouse@220/220:3", w: 640, h: 480, hour: 9},
+	// M7c: Fearsome Fetishes' (29) standard shelves, the mouse on a potion.
+	{name: "shop_magic", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(29) },
+		click: "-:2,Click@555/160:1,Mouse@115/180:3", w: 640, h: 480, hour: 9},
+	// M7c: Herbal Elixirs' (42) special shelves.
+	{name: "shop_alchemist", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(42) },
+		click: "-:2,Click@555/197:1,Mouse@115/320:3", w: 640, h: 480, hour: 9},
+	// M7c: Cures and Curses' (139) fire shelf, the mouse on a book.
+	{name: "guild_shelf", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(139) },
+		click: "-:2,Click@555/180:1,Mouse@60/150:3", w: 640, h: 480, hour: 9},
+	// M7c: True Mettle's Sell with a longsword, a broken Templar's sword, unidentified
+	// chain mail (green) and a stolen mace in the pack, the mouse on the longsword.
+	{name: "shop_sell", mapName: "out01.odm", setup: func(w *World) {
+		p, t := &w.S.Party.Players[0], w.Tables().Items
+		p.AddItem(t, -1, items.Item{Number: 1, Flags: items.FlagIdentified})
+		p.AddItem(t, -1, items.Item{Number: 4, Flags: items.FlagIdentified | items.FlagBroken})
+		p.AddItem(t, -1, items.Item{Number: 90})
+		p.AddItem(t, -1, items.Item{Number: 66, Flags: items.FlagIdentified | items.FlagStolen})
+		w.SpeakInHouse(1)
+	}, click: "-:2,Click@555/245:1,Mouse@300/300:2,Click@555/167:1,Mouse@20/50:3", w: 640, h: 480, hour: 9},
+	// M7c: the right button held on a shelf item of True Mettle.
+	{name: "shop_popup", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(1) },
+		click: "-:2,Click@555/160:1,Mouse@290/150:2,Right@290/150:2", w: 640, h: 480, hour: 9},
 }
 
 func TestGolden(t *testing.T) {

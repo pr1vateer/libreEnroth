@@ -114,32 +114,21 @@ func (s *dialogScreen) servicePanel(hover int) servicePanel {
 	return servicePanel{draw: func(*gfx.Canvas, int) {}}
 }
 
-// shopPanel is a shop's main menu: Buy Standard, Buy Special, Display Inventory, Learn
-// Skills (what they open is M7's).
-//
-// mm8: 0x4b9b5b, 0x4bb328, 0x4b5e2c, 0x4ba6f6 (menu 1)
-func (s *dialogScreen) shopPanel() servicePanel {
-	d, f := s.d, s.art.arrus
-	if d.Menu != 1 || len(d.Buttons) != 4 {
-		return servicePanel{draw: func(*gfx.Canvas, int) {}}
-	}
-	labels := s.globals(0x86, 0x98, 0x9f, 0xa0)
-	spots := spread(f, d.Buttons, labels, 0xae, 0x8a, 0)
-	return servicePanel{spots: spots, draw: func(c *gfx.Canvas, hover int) { drawSpots(c, f, spots, hover, inkHover) }}
-}
-
 // guildLabels are the global.txt names of the guilds' buttons.
 var guildLabels = map[int]int{
 	0x6e: 0x11b, 0x6f: 0x11c, 0x70: 0x11d, 0x71: 0x11e, 0x72: 0x121, 0x73: 0x122, 0x74: 0x123,
 	0x75: 0x11f, 0x76: 0x120, dialog.SvcLearn: 0xa0,
 }
 
-// guildPanel is a guild's main menu: its spell shelves and Learn Skills (M7), spread
-// over 0x95 pixels from 0xa2.
+// guildPanel is a guild's main menu: its spell shelves and Learn Skills (M7d), spread
+// over 0x95 pixels from 0xa2; or a school's shelf.
 //
-// mm8: 0x4b6b98 (menu 1)
+// mm8: 0x4b6b98 (menu 1, 0x6e..0x76)
 func (s *dialogScreen) guildPanel() servicePanel {
 	d, f := s.d, s.art.arrus
+	if d.ShelfMenu() {
+		return servicePanel{draw: func(c *gfx.Canvas, _ int) { s.drawShelf(c) }}
+	}
 	if d.Menu != 1 {
 		return servicePanel{draw: func(*gfx.Canvas, int) {}}
 	}
