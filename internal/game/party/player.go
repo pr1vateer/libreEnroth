@@ -64,11 +64,13 @@ var conditionExpr = [numConditions]int{
 // Player is a party member or roster character: the parts of the original's Player
 // (0x1d28 bytes, types.h) that libre-enroth uses so far.
 type Player struct {
-	Name     string // +0x0a8
-	Class    int    // +0x352: class id (tables.ClassByName)
-	Face     int    // +0x353: portrait 0..29
-	RosterID int    // its g_players index in g_partyRoster: 0 the hero, -1 none
-	Voice    int    // +0x1be4
+	Name string // +0x0a8
+	// Biography is roster.txt's Blurb (+0x0c8, 0x289 characters at most).
+	Biography string
+	Class     int // +0x352: class id (tables.ClassByName)
+	Face      int // +0x353: portrait 0..29
+	RosterID  int // its g_players index in g_partyRoster: 0 the hero, -1 none
+	Voice     int // +0x1be4
 	// OldVoice and OldFace keep the voice and face a lich had before (+0x1be8, +0x1bec).
 	OldVoice, OldFace int
 	Conditions        [numConditions]int64 // +0x000: game time each began, 0 = not set

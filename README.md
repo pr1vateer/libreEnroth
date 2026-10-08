@@ -11,7 +11,8 @@ drawn by a software renderer that reproduces the original's Direct3D look. Time 
 party rests, and the map scripts run: doors, clicks, NPC dialogues and houses with their clips.
 Taverns, temples, banks, stables and boats work, as do dungeon entrances and walking off the
 edge of a map to the next one. Stats, the character screen and inventory, chests, potions,
-shops and guild shelves work too; training and learning skills don't yet. Monsters, combat,
+shops and guild shelves, learning skills, teachers, training and the Adventurer's Inn (hiring
+and dismissing characters) work too. Monsters, combat,
 spells, saving and sound are later milestones. "New Game" → OK starts on `out01.odm`.
 See `PLAN.md` in the parent repository for the roadmap.
 
@@ -101,6 +102,10 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
     - Hold the right button on an item for its description (and on a stat or skill).
     - With an item on the cursor, right-click another to mix potions (or a reagent into a
       bottle); drop a potion on the paper doll, or right-click a portrait, to drink it.
+    - **Dismiss** (members 2–5; click it twice) sends the member back to the Adventurer's
+      Inn.
+  - In the Adventurer's Inn, click a face to see that character, again for its character
+    screen; **H**ire takes it into the party, the arrows scroll the list.
   - Chests opened by the map's events show their items: click to take (gold goes to the
     party), click on the chest to put the cursor's item back; the selected portrait again
     shows that member's pack.

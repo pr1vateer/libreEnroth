@@ -24,6 +24,7 @@ type All struct {
 	Roster     []RosterEntry
 	Travel     *Travel
 	Shops      *Shops
+	Learning   *Learning
 	// Items are the item tables and the descriptions loaded with them; Classes the class
 	// and stat tables of the executable.
 	Items   *Items
@@ -72,6 +73,9 @@ func Load(d *assets.Data) (*All, error) {
 		return nil, err
 	}
 	if a.Shops, err = ReadShops(d.Exe); err != nil {
+		return nil, err
+	}
+	if a.Learning, err = ReadLearning(d.Exe); err != nil {
 		return nil, err
 	}
 	return a, nil

@@ -59,6 +59,9 @@ type portraits struct {
 	rng     *party.Rand
 	pft     desc.PFT
 	faces   [][portraitFrames]*gfx.Sprite // per member, frame t at [t-1]
+	loaded  []int                         // the face each entry of faces is
+	prefix  []string                      // g_portraitNames
+	r       *Resources
 	dead    *gfx.Sprite
 	erad    *gfx.Sprite
 	selring *gfx.Sprite
@@ -82,6 +85,7 @@ type portraits struct {
 func newPortraits(l *loader, ct *Container) *portraits {
 	r := l.r
 	p := &portraits{
+		r:       r,
 		m:       r.Party,
 		rng:     r.Rand,
 		selring: l.icon("selring", false),
@@ -101,37 +105,66 @@ func newPortraits(l *loader, ct *Container) *portraits {
 	if ctx != nil {
 		p.pft = ctx.PFT
 	}
-	prefixes := l.exeStrings(vaPortraitNames, numFaces)
+	p.prefix = l.exeStrings(vaPortraitNames, numFaces)
 	for _, pl := range p.m.Players {
-		var f [portraitFrames]*gfx.Sprite
 		if pl.Face < 0 || pl.Face >= PortraitFaces {
 			l.fail(fmt.Errorf("portrait: face %d out of range", pl.Face))
-			continue
 		}
-		for t := range f {
-			f[t] = l.icon(fmt.Sprintf("%s%02d", prefixes[pl.Face], t+1), false)
-		}
-		p.faces = append(p.faces, f)
 	}
 	for i := range p.slots {
 		s := NewHotspot(portraitX[i], portraitY, portraitW, portraitH, Msg{ID: msgSelectPlayer, Param: i + 1})
 		s.Hotkey = Key('1' + i)
-		s.disabled = i >= len(p.m.Players)
 		s.onEnter = func(q *MsgQueue) { q.Post(Msg{ID: msgHoverPlayer, Param: i + 1}) }
 		p.slots[i] = s
 		ct.Add(s)
 	}
 	if l.err == nil {
-		p.shown = make([]int, len(p.m.Players))
+		p.sync(l)
 		p.pick(0)
 	}
 	return p
+}
+
+// sync loads the faces of members whose face changed (a member hired or dismissed, a
+// lich's new face) and enables the slots of the members there are.
+//
+// mm8: 0x49269b (Portraits_ReloadSlot), 0x4ca946 (GuiPortraits_EnableSlots)
+func (p *portraits) sync(l *loader) {
+	n := len(p.m.Players)
+	for i := range p.slots {
+		p.slots[i].disabled = i >= n
+	}
+	if len(p.shown) != n {
+		p.shown = make([]int, n)
+	}
+	p.faces, p.loaded = p.faces[:min(len(p.faces), n)], p.loaded[:min(len(p.loaded), n)]
+	for i := range p.m.Players {
+		face := p.m.Players[i].Face
+		if i < len(p.loaded) && p.loaded[i] == face {
+			continue
+		}
+		var f [portraitFrames]*gfx.Sprite
+		if face >= 0 && face < PortraitFaces && face < len(p.prefix) {
+			if l == nil {
+				l = &loader{r: p.r}
+			}
+			for t := range f {
+				f[t] = l.icon(fmt.Sprintf("%s%02d", p.prefix[face], t+1), false)
+			}
+		}
+		if i < len(p.faces) {
+			p.faces[i], p.loaded[i] = f, face
+		} else {
+			p.faces, p.loaded = append(p.faces, f), append(p.loaded, face)
+		}
+	}
 }
 
 // pick chooses each member's face for the next draw.
 //
 // mm8: 0x49286e (Portraits_Draw)
 func (p *portraits) pick(ticks int) {
+	p.sync(nil)
 	for i := range p.m.Players {
 		p.shown[i] = p.m.Players[i].Portrait(p.pft, ticks, p.rng)
 	}
@@ -163,7 +196,9 @@ func (p *portraits) draw(c *gfx.Canvas) {
 		case party.PortraitEradicated:
 			c.Blit(p.erad, portraitX[i], portraitY)
 		default:
-			c.Blit(p.faces[i][face-1], portraitX[i], portraitY)
+			if s := p.faces[i][face-1]; s != nil {
+				c.Blit(s, portraitX[i], portraitY)
+			}
 		}
 	}
 	if s := p.m.Selected; s >= 1 && s <= party.MaxMembers {

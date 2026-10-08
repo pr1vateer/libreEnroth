@@ -84,11 +84,19 @@ type charScreen struct {
 	ctx    *party.Ctx
 	it     *tables.Items
 	member int // 0-based slot shown (GuiChar +0x128, a g_players index in the original)
-	page   int // +0x124
-	btn    [4]*Button
-	fr     [4]*gfx.Sprite // fr_skill, fr_stats, fr_award, fr_inven by page
-	groups [4][]int32     // weapons, magic, armour, misc
-	rows   []skillRow
+	// roster is the roster character shown instead of a member (the inn's view of one
+	// not in the party), -1 for none; fromInn is the inn's mode 1 (no dismiss button).
+	roster  int
+	fromInn bool
+	// dismiss is the dismiss button (but26, mode 0) and armed its first click
+	// (GuiChar +0x2c0, +0x2c4).
+	dismiss *Button
+	armed   bool
+	page    int // +0x124
+	btn     [4]*Button
+	fr      [4]*gfx.Sprite // fr_skill, fr_stats, fr_award, fr_inven by page
+	groups  [4][]int32     // weapons, magic, armour, misc
+	rows    []skillRow
 	// awards: the sorted ids, the first shown, the number drawn last time and the
 	// scroll requests (0x5db874, 0x517a4c, 0x517a44, 0x517a68/6c, 0x517a40).
 	awards           []int
@@ -113,6 +121,15 @@ type charScreen struct {
 // mm8: 0x4213c0 (Party_ClickPortrait: GuiChar_Ctor 0x4cc0ec, GuiStack_Push -> Build
 // 0x4cc1f4, GuiChar_SetPlayer 0x4cc855, GuiChar_SetPage 0x4cca80)
 func newCharScreen(g *inGame, member int) (*charScreen, error) {
+	return newCharScreenFor(g, member, -1, false)
+}
+
+// newCharScreenFor opens the character screen on member, or (roster >= 0) on roster
+// character roster; fromInn is the Adventurer's Inn's view (GuiChar_Build mode 1: no
+// dismiss button).
+//
+// mm8: 0x4cb402 (GuiInn_ViewCharacter: GuiStack_Push(.., 1))
+func newCharScreenFor(g *inGame, member, roster int, fromInn bool) (*charScreen, error) {
 	r := g.r
 	l := &loader{r: r}
 	ctx, err := r.Ctx()
@@ -123,7 +140,11 @@ func newCharScreen(g *inGame, member int) (*charScreen, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &charScreen{r: r, g: g, ctx: ctx, it: ctx.Items, da: da, art: loadPopupArt(l), page: pageNone, member: member}
+	s := &charScreen{r: r, g: g, ctx: ctx, it: ctx.Items, da: da, art: loadPopupArt(l), page: pageNone, member: member,
+		roster: roster, fromInn: fromInn}
+	if i := r.Party.RosterSlot(roster); roster >= 0 && i >= 0 {
+		s.member, s.roster = i, -1 // a member viewed from the inn
+	}
 	s.doll = newPaperDoll(l, ctx.Items)
 	s.skillFont = l.font("lucida.fnt")
 	for i, n := range [4]string{"fr_skill", "fr_stats", "fr_award", "fr_inven"} {
@@ -176,7 +197,13 @@ func newCharScreen(g *inGame, member int) (*charScreen, error) {
 	// The magnifier, added last, sees clicks before the doll's hotspot under it (and
 	// the original makes it the captured widget too, vt+0xb4).
 	s.ct.Add(NewHotspot(0x25e, 300, 0x1e, 0x1e, Msg{ID: msgCharMagnify}))
-	// The dismiss button (members 2..5) is the inn's (M7d).
+	if !s.fromInn {
+		// mm8: 0x4cc1f4 (mode 0: but26, msg 0x1c7, added unless member 1 is selected)
+		s.dismiss = l.button(0x208, 0x1a4, Msg{ID: msgCharDismiss}, "but26u", "but26d", "but26h", true)
+		if r.Party.Selected != 1 {
+			s.ct.Add(s.dismiss)
+		}
+	}
 	if l.err != nil {
 		return nil, l.err
 	}
@@ -194,7 +221,22 @@ func newCharScreen(g *inGame, member int) (*charScreen, error) {
 }
 
 // player is the member shown.
-func (s *charScreen) player() *party.Player { return &s.r.Party.Players[s.member] }
+func (s *charScreen) player() *party.Player {
+	if s.roster >= 0 {
+		return s.r.Party.RosterPlayer(s.roster)
+	}
+	return &s.r.Party.Players[s.member]
+}
+
+// rosterView reports a roster character outside the party on show: what acts on a
+// member (skill points, the pack, the doll, mixing) is left out for it.
+func (s *charScreen) rosterView() bool {
+	if s.roster >= 0 {
+		s.r.note("roster-edit", "changing a roster character outside the party from the inn")
+		return true
+	}
+	return false
+}
 
 // setPage leaves the page shown (its skill labels or award buttons go; its button's up
 // and hover pictures swap back) and shows page (pageRefresh: rebuilds the same one).
@@ -292,7 +334,7 @@ func (s *charScreen) buildSkills() {
 		if lvl+1 <= int(p.SkillPoints) {
 			ink = inkSkillCan
 		}
-		name := s.r.GlobalText(skillNameGlobal[skill])
+		name := s.r.GlobalText(tables.SkillNameGlobal[skill])
 		rank := ""
 		switch {
 		case v&party.SkillGM != 0:
@@ -475,7 +517,7 @@ func (s *charScreen) update(in *Input) bool {
 		case msgCharDoll:
 			s.clickDoll(in)
 		case msgCharSkill:
-			if msg.Param < 0 || msg.Param >= party.NumSkills {
+			if msg.Param < 0 || msg.Param >= party.NumSkills || s.rosterView() {
 				continue
 			}
 			if refuse := m.SpendSkillPoint(s.member, msg.Param, s.ctx); refuse != 0 {
@@ -496,6 +538,8 @@ func (s *charScreen) update(in *Input) bool {
 			}
 		case msgSelectPlayer:
 			s.clickPortrait(msg.Param)
+		case msgCharDismiss:
+			s.dismissMember()
 		}
 	}
 	if in.Right {
@@ -523,16 +567,68 @@ func (s *charScreen) clickPortrait(slot int) {
 	if m.DropOnPortrait(slot, s.ctx) {
 		return
 	}
-	s.member = slot - 1
+	s.member, s.roster = slot-1, -1
 	s.setPage(s.page)
 	m.Selected = slot
+	s.updateDismiss()
+}
+
+// dismissShown reports the dismiss button among the children.
+func (s *charScreen) dismissShown() bool {
+	for _, w := range s.ct.Children {
+		if w == Widget(s.dismiss) && s.dismiss != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// updateDismiss shows the dismiss button for members 2..5 only and disarms it.
+//
+// mm8: 0x4cca26 (GuiChar_UpdateDismiss)
+func (s *charScreen) updateDismiss() {
+	if s.dismiss == nil {
+		return
+	}
+	s.remove([]Widget{s.dismiss})
+	if s.r.Party.Selected != 1 {
+		s.ct.Add(s.dismiss)
+	}
+	s.armed = false
+}
+
+// dismissMember is the dismiss button: refused in turn-based mode, a first click arms it,
+// the second sends the selected member back to the roster (the inn lists it again) and
+// shows member 1.
+//
+// mm8: 0x42f877 (msg 0x1c7: sounds 0x1b and 0xcd are M11's), 0x4cc9fd, 0x4cca15
+func (s *charScreen) dismissMember() {
+	m := s.r.Party
+	if m.Selected == 1 {
+		return
+	}
+	if m.TurnBased {
+		s.r.Status.SetHover(s.r.GlobalText(0x2e4))
+		return
+	}
+	if !s.armed {
+		s.armed = true
+		s.r.Status.SetHover(s.r.GlobalText(0x2e2))
+		return
+	}
+	s.armed = false
+	m.RemoveMember(m.Selected - 1)
+	m.Selected = 1
+	s.member, s.roster = 0, -1
+	s.setPage(pageRefresh)
+	s.updateDismiss()
 }
 
 // clickPage is a click on the page area: on the inventory page, the pack.
 //
 // mm8: 0x421764 (CharScreen_ClickInventory)
 func (s *charScreen) clickPage(in *Input) {
-	if s.r.Party.CharPage != CharPageInventory {
+	if s.r.Party.CharPage != CharPageInventory || s.rosterView() {
 		return
 	}
 	hit := s.pick.at(in.X, in.Y)
@@ -551,6 +647,9 @@ func (s *charScreen) clickPage(in *Input) {
 // mm8: 0x468a4b (PaperDoll_Click)
 func (s *charScreen) clickDoll(in *Input) {
 	m := s.r.Party
+	if s.rosterView() {
+		return
+	}
 	sel := m.Selected - 1
 	if sel < 0 || sel >= len(m.Players) {
 		return
@@ -594,7 +693,7 @@ func (s *charScreen) rightAction(in *Input) {
 		return
 	}
 	slot := s.itemUnder(in)
-	if slot == 0 || !m.Players[s.member].CanAct() {
+	if slot == 0 || s.rosterView() || !m.Players[s.member].CanAct() {
 		return
 	}
 	switch m.MixPotion(s.member, slot, s.speakOnce, s.ctx, charNotes{s}) {
@@ -1138,7 +1237,7 @@ func (s *charScreen) skillPopup(c *gfx.Canvas, in *Input) {
 		if r.skill < 0 || r.name.Text == s.r.GlobalText(0x99) || !hit(r.name.Rect(), in.X, in.Y) {
 			continue
 		}
-		s.art.drawText(c, s.r.GlobalText(skillNameGlobal[r.skill]), s.skillText(r.skill), in.Y)
+		s.art.drawText(c, s.r.GlobalText(tables.SkillNameGlobal[r.skill]), s.skillText(r.skill), in.Y)
 		return
 	}
 }

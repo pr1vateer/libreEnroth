@@ -228,3 +228,37 @@ func (m *Members) SetMouseItem(t *tables.Items, it items.Item) {
 	m.DropMouseItem(t)
 	m.MouseItem = it
 }
+
+// HasItem reports member i holding item id in any of its slots (the worn ones too),
+// or id on the mouse: Compare of the item variable.
+//
+// mm8: 0x44a0fe.. (Evt_Compare case 0x11)
+func (m *Members) HasItem(i int, id int32) bool {
+	p := &m.Players[i]
+	for k := range p.Items {
+		if uint32(p.Items[k].Number) == uint32(id) {
+			return true
+		}
+	}
+	return uint32(m.MouseItem.Number) == uint32(id)
+}
+
+// GiveItem puts item id on the mouse as Add and Set of the item variable do:
+// identified, a handed-out artifact recorded; charge (Add) also charges a wand.
+//
+// mm8: 0x449726 (Evt_Add case 0x11), 0x448d4b (Evt_Set case 0x11)
+func (m *Members) GiveItem(id int32, charge bool, c *Ctx) {
+	t := c.Items
+	if t == nil {
+		return
+	}
+	it := items.Item{Number: id, Flags: items.FlagIdentified}
+	if uint32(id) >= items.FirstArtifact && uint32(id) < items.FirstArtifact+items.NumArtifacts {
+		m.ArtifactsFound[id-items.FirstArtifact] = true
+	}
+	if charge && it.Number >= items.FirstWand && it.Number <= items.LastWand {
+		it.Charges = max(int32(c.Rand.Int()%6+1+int(t.Item(it.Number).Mod2)), 1)
+		it.MaxCharges = uint8(it.Charges)
+	}
+	m.SetMouseItem(t, it)
+}

@@ -24,6 +24,12 @@ func NewRoster(entries []tables.RosterEntry, c *Ctx, found *[items.NumArtifacts]
 	for i, en := range entries {
 		p := &out[i]
 		*p = Player{Name: en.Name, Class: en.Class, Face: int(en.Face), Voice: int(en.Voice), RosterID: i, Expr: ExprNormal}
+		if rosterBlurb < len(en.Cells) {
+			p.Biography = txt.StripQuotes(en.Cells[rosterBlurb])
+			if len(p.Biography) > maxBiography {
+				p.Biography = p.Biography[:maxBiography]
+			}
+		}
 		if c == nil || c.Items == nil || c.Classes == nil {
 			continue
 		}
@@ -31,6 +37,12 @@ func NewRoster(entries []tables.RosterEntry, c *Ctx, found *[items.NumArtifacts]
 	}
 	return out
 }
+
+// roster.txt's Blurb column and the biography's size (strncpy 0x289).
+const (
+	rosterBlurb  = 123
+	maxBiography = 0x289
+)
 
 // rosterStats fills a roster character's stats from its row's cells.
 //

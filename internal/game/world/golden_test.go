@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/party"
 	"os"
@@ -172,6 +173,11 @@ var worldHashes = map[string]string{
 	"guild_shelf":    "c0b0601688374680cf13b0056d15650392c3daf41bcb7c256621d8f39937ef42",
 	"shop_sell":      "04416850a246afb8c77088a7733166d50d3f26ad3713975271d9f1faa36dafb3",
 	"shop_popup":     "fe1595a1d3151d75515f2fa173baa0637e26482614224cdf8991c2759283a185",
+	// M7d
+	"house_learn":    "44bad96ad4163d71544e76a72b90e67af33f372319768078d361a5e0d9c137d5",
+	"house_training": "0dd41d711cea0e15442b1e7275c27b13ab58f49071fe6d5939cf61f37b2ad11a",
+	"teacher_topic":  "655fde40df79d5477b125598ba44b8d0215263d25a93b85d48ceab107d4eeb67",
+	"inn_roster":     "372b92c2515917b29a72149c83cbfebe1e3d19c3bbe62e9893837bf9ee12f308",
 }
 
 var views = []view{
@@ -267,6 +273,41 @@ var views = []view{
 	// M7c: the right button held on a shelf item of True Mettle.
 	{name: "shop_popup", mapName: "out01.odm", setup: func(w *World) { w.SpeakInHouse(1) },
 		click: "-:2,Click@555/160:1,Mouse@290/150:2,Right@290/150:2", w: 640, h: 480, hour: 9},
+	// M7d: Rites of Passage (89): Learn Skills, the mouse on the first skill.
+	{name: "house_learn", mapName: "out01.odm", setup: func(w *World) {
+		w.S.Party.Gold = 1000
+		w.SpeakInHouse(89)
+		w.Dialog().Click(dialog.Button{Msg: dialog.MsgService, Param: dialog.SvcLearn})
+	}, click: "Mouse@555/215:3", w: 640, h: 480, hour: 9},
+	// M7d: Rites of Passage with the experience for level 2, the mouse on Train.
+	{name: "house_training", mapName: "out01.odm", setup: func(w *World) {
+		w.S.Party.Players[0].Exp = 1500
+		w.SpeakInHouse(89)
+	}, click: "Mouse@555/200:3", w: 640, h: 480, hour: 9},
+	// M7d: Puddle Thain (248) offering the staff's expert rank to a level 4 staff.
+	{name: "teacher_topic", mapName: "out01.odm", setup: func(w *World) {
+		w.S.Party.Gold = 5000
+		w.S.Party.Players[0].Skills[party.SkillStaff] = 4
+		w.SpeakInHouse(248)
+		d := w.Dialog()
+		if d.Sel == 0 {
+			d.SelectResident(len(d.Portraits) - 1)
+		}
+		for _, b := range d.Buttons {
+			if d.Label(b) == w.Tables().Topics.Topic[300] {
+				d.Click(b)
+				break
+			}
+		}
+	}, click: "Mouse@555/240:3", w: 640, h: 480, hour: 9},
+	// M7d: the Adventurer's Inn (185) with roster characters 1..9 waiting, the second
+	// picked.
+	{name: "inn_roster", mapName: "out01.odm", setup: func(w *World) {
+		for id := 1; id <= 9; id++ {
+			w.S.Party.QBits.Set(400+id, true)
+		}
+		w.SpeakInHouse(185)
+	}, click: "-:2,Click@120/80:1,Mouse@300/300:20", w: 640, h: 480, hour: 9},
 }
 
 func TestGolden(t *testing.T) {

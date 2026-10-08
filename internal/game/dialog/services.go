@@ -107,12 +107,8 @@ func arcomageMenu() []Button {
 // one it has). They do nothing: the menu stays.
 func deferred(typ, code int) string {
 	switch {
-	case typ == TypeTraining && code == SvcTrain:
-		return "training (0x4b5618, M7)"
 	case typ == TypeTownHall && code == SvcBounty:
 		return "the bounty hunt (0x4bd028 code 99, the monsters: M8)"
-	case code == SvcLearn || code >= 0x24 && code <= 0x4a:
-		return "learning skills (0x4b43ce, M7)"
 	case code == SvcArcomagePlay:
 		return "Arcomage (msg 0x1d, M12)"
 	}
@@ -165,11 +161,11 @@ func (d *Dialog) BlockedText() string {
 }
 
 // buttonsBlocked reports a menu whose draw found the selected member unable to act
-// (House_CheckCanAct zeroes the window's keyCount): the main menu, and a shop's
+// (House_CheckCanAct zeroes the window's keyCount): the main menu, Learn Skills, a shop's
 // shelves, Sell, Identify and Repair (whose buttons stay from Display Inventory).
 func (d *Dialog) buttonsBlocked() bool {
 	switch {
-	case d.Menu == 1:
+	case d.Menu == 1, d.Menu == SvcLearn:
 	case d.IsShop() && (d.ShelfMenu() || d.PackMenu() && d.Menu != SvcDisplay):
 	default:
 		return false
@@ -196,6 +192,9 @@ func (d *Dialog) service(code int) {
 			return
 		}
 		if d.Type == TypeTemple && code == SvcHeal && d.selected() != nil && !d.CanHeal(d.selected()) {
+			return
+		}
+		if d.Type == TypeTraining && code == SvcTrain && !d.canTrain() {
 			return
 		}
 		d.Buttons = nil
@@ -233,6 +232,18 @@ func (d *Dialog) service(code int) {
 		case SvcBuyFood:
 			d.buyFood()
 		}
+	case TypeTraining:
+		if d.Menu == SvcTrain {
+			d.train()
+		}
+	}
+	if d.Menu == SvcLearn {
+		if code == SvcLearn {
+			d.Buttons = d.learnMenu()
+		} else {
+			d.learn(code)
+		}
+		return
 	}
 	switch code {
 	case SvcBuyStandard, SvcBuySpecial:

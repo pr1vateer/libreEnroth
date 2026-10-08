@@ -134,6 +134,11 @@ type Dialog struct {
 	// ShelfY is how far down the weapon shop's table each weapon lies (0xffd2bc).
 	ShelfY [tables.ShopSlots]int
 
+	// teacherEvent is the teacher topic shown (the window's param, 300..0x1a0).
+	teacherEvent int
+	// trained counts the levels each member (1-based) trained in this visit
+	// (0xffd2a4, zeroed by House_Enter).
+	trained   [party.MaxMembers + 1]int
 	keepReply bool                        // 0xffd344: "Party is full!" survives the back step
 	donations [party.MaxMembers + 1]uint8 // 0xffd35c: the temple's count per member
 	topicSlot int                         // 0xffd33c: the topic button that offered a roster character
@@ -232,6 +237,18 @@ func (d *Dialog) OnExit() bool { return d.Sel == len(d.Portraits) && d.ExitMap !
 // OnProprietor reports the proprietor being selected.
 func (d *Dialog) OnProprietor() bool { return d.Sel == 1 && d.Proprietor }
 
+// IsInn reports a house whose clip is of type 0x23: SpeakInHouse opens the Adventurer's
+// Inn roster screen for it instead of entering it (no opening hours, no dialogue).
+//
+// mm8: 0x4446bd (case 2: House_Anim(video)->type == '#' pushes GuiInn)
+func IsInn(t *tables.All, house int) bool {
+	if t == nil {
+		return false
+	}
+	def := t.House(house)
+	return def != nil && t.Anim(int(def.Video)).Type == TypeInn
+}
+
 // OpenHouse enters house id: the closed-hours check, the residents and the portraits.
 // It returns nil (after the status message) when the house is closed.
 //
@@ -239,7 +256,7 @@ func (d *Dialog) OnProprietor() bool { return d.Sel == 1 && d.Proprietor }
 func OpenHouse(h Host, house int) *Dialog {
 	t := h.Tables()
 	def := t.House(house)
-	if def == nil {
+	if def == nil || IsInn(t, house) {
 		return nil
 	}
 	if house == 600 || house == 601 {
@@ -258,9 +275,6 @@ func OpenHouse(h Host, house int) *Dialog {
 	// the town halls' fines are M6c's.
 	d := &Dialog{h: h, Kind: KindHouse, House: house, Def: def, Anim: t.Anim(int(def.Video))}
 	d.Type = int(d.Anim.Type)
-	if d.Anim.Type == 0x23 {
-		h.Note("the Adventurer's Inn roster screen (0x4caac9)")
-	}
 	d.loadResidents()
 	// mm8: 0x41c235 (type 0x19): with one portrait it is selected at once
 	if len(d.Portraits) == 1 {
@@ -432,8 +446,7 @@ func (d *Dialog) Click(b Button) {
 	case param == ParamJoinNo:
 		d.join(n, false)
 	case param == ParamLearn:
-		d.h.Note("paid skill lessons (msg 0x4f, M7)")
-		d.post()
+		d.takeLesson()
 	case param == ParamAward:
 		d.h.Note("paid awards (msg 0x52, M6c)")
 	case d.Kind == KindNPC && param >= 0x55 && param <= 0x58:
@@ -463,36 +476,25 @@ func (d *Dialog) topic(n *tables.NPC, param, ev int) {
 	}
 }
 
-// teacher shows a teacher's topic: its text and a "Learn" button when the lesson is
-// possible (the price and the check are M7's skills). In a house the text is NPCText(ev),
-// in an NPC's own dialogue NPCText(169 + ev).
+// teacher shows a teacher's topic: its text and the Learn button, whose label is the
+// lesson on offer (Lesson). In a house the text is NPCText(ev), in an NPC's own dialogue
+// NPCText(169 + ev).
 //
-// mm8: 0x4b4c6f (house), 0x4b4f9e (NPC), 0x4b31fe (the price, M7)
+// mm8: 0x4b4c6f (house), 0x4b4f9e (NPC)
 func (d *Dialog) teacher(ev int) {
-	t := d.h.Tables().Topics.Text
 	i := ev
 	if d.Kind == KindNPC {
 		i = 169 + ev
 	}
-	if i < len(t) {
-		d.Reply = t[i]
-	}
+	d.Reply = d.TopicText(i)
 	d.State = StateTeacher
-	d.h.Note("teacher prices and lessons (0x4b31fe, M7)")
-	d.Buttons = []Button{{MsgHouseTopic, ParamLearn}}
-	d.Menu = -1
-}
-
-// lostItem is the lost-item return (topic 0x2c1): NPCText 851, or 852 and the item when
-// the party lost one of the listed quest items (M7).
-//
-// mm8: 0x4b2ac7
-func (d *Dialog) lostItem() {
-	d.State = StateLostItem
-	if t := d.h.Tables().Topics.Text; len(t) > 851 {
-		d.Reply = t[851]
+	d.teacherEvent = ev
+	msg := MsgHouseTopic
+	if d.Kind == KindNPC {
+		msg = MsgNPCTopic
 	}
-	d.h.Note("returning lost quest items (0x4b2ac7, M7)")
+	d.Buttons = []Button{{msg, ParamLearn}}
+	d.Menu = -1
 }
 
 // joinOffer is a roster character offering to join: NPCText(198 + 2k) and Yes/No.
@@ -685,7 +687,10 @@ func (d *Dialog) Label(b Button) string {
 	case ParamJoinNo:
 		return g(0x2c1)
 	case ParamLearn:
-		return "" // g(0x217) "Learn" once the lesson is possible (M7)
+		if d.Kind == KindNPC {
+			return "" // an NPC's own dialogue draws no label for it (0x443441)
+		}
+		return d.Lesson(d.teacherEvent).Label // mm8: 0x4b363b (Teacher_Offer every frame)
 	}
 	if n == nil || b.Param < ParamTopic0 || b.Param >= ParamTopic0+6 {
 		return ""

@@ -130,14 +130,28 @@ func (w *World) NPCChanged(op evt.Op, id int) {
 }
 
 // SpeakInHouse implements evt.Host: the house dialogue opens at once (the rest of the
-// event runs with it open), unless the house is closed.
+// event runs with it open), unless the house is closed; an inn's roster screen opens
+// instead of its dialogue.
 //
 // mm8: 0x4446bd (case 2), 0x443f4b (House_Enter)
 func (w *World) SpeakInHouse(house int) {
+	if dialog.IsInn(w.tables.Game, house) {
+		// mm8: 0x4446bd (case 2: the inn's roster screen; its sounds are M11's)
+		w.inn = house
+		return
+	}
 	if d := dialog.OpenHouse(w, house); d != nil {
 		w.dialog = d
 	}
 }
+
+// OpenedInn implements ui.InnOpener: the Adventurer's Inn an event opened, 0 for none.
+func (w *World) OpenedInn() int { return w.inn }
+
+// CloseInn implements ui.InnOpener.
+//
+// mm8: 0x4cb329 (GuiInn_OnDeactivate: g_screenMode 0, the timer resumes)
+func (w *World) CloseInn() { w.inn = 0 }
 
 // SpeakNPC implements evt.Host.
 //

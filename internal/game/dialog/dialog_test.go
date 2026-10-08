@@ -26,12 +26,16 @@ type fakeHost struct {
 	mapNow string
 	moves  []string
 	spoke  []int
+	glob   map[int]string // global.txt overrides
 }
 
 func (h *fakeHost) Tables() *tables.All     { return h.t }
 func (h *fakeHost) NPCs() *npc.State        { return h.npcs }
 func (h *fakeHost) Members() *party.Members { return h.m }
 func (h *fakeHost) Global(i int) string {
+	if g, ok := h.glob[i]; ok {
+		return g
+	}
 	switch i {
 	case 0x19e:
 		return "This place is open from %d%s to %d%s"

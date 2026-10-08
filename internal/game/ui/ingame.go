@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/game/clock"
 	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/party"
@@ -58,6 +59,7 @@ type inGame struct {
 	smallnum                    *text.Font
 	char                        *charScreen
 	chest                       *chestScreen
+	inn                         *innScreen
 	lastIn                      Input // the last tick's input (the pop-ups draw at its mouse)
 }
 
@@ -125,6 +127,9 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 			if _, err := g.openDialogs(); err != nil {
 				return nil, err
 			}
+			if err := g.openInn(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return g, l.err
@@ -133,7 +138,7 @@ func newInGame(r *Resources, mapName string) (*inGame, error) {
 // Viewport is where the world shows through.
 // The rest screen and a house (its clip) cover it.
 func (g *inGame) Viewport() image.Rectangle {
-	if g.rest != nil || g.char != nil || g.chest != nil || g.dialog != nil && g.dialog.video != nil || g.transition != nil && g.transition.video != nil {
+	if g.rest != nil || g.char != nil || g.chest != nil || g.inn != nil || g.dialog != nil && g.dialog.video != nil || g.transition != nil && g.transition.video != nil {
 		return image.Rectangle{}
 	}
 	return Viewport
@@ -145,6 +150,16 @@ func (g *inGame) Update(in *Input) Transition {
 	if g.char != nil {
 		if g.char.update(in) {
 			g.char = nil
+		}
+		g.portraits.update()
+		return Transition{}
+	}
+	if g.inn != nil {
+		if g.inn.update(in) {
+			g.inn = nil
+			if w, ok := g.world.(InnOpener); ok {
+				w.CloseInn()
+			}
 		}
 		g.portraits.update()
 		return Transition{}
@@ -221,6 +236,9 @@ func (g *inGame) Update(in *Input) Transition {
 			return Transition{err: err}
 		}
 		if err := g.openChest(); err != nil {
+			return Transition{err: err}
+		}
+		if err := g.openInn(); err != nil {
 			return Transition{err: err}
 		}
 	}
@@ -441,6 +459,22 @@ func (g *inGame) openChest() error {
 	return nil
 }
 
+// openInn opens the Adventurer's Inn's roster screen for an inn an event opened.
+//
+// mm8: 0x4446bd (case 2: GuiInn pushed)
+func (g *inGame) openInn() error {
+	w, ok := g.world.(InnOpener)
+	if !ok || g.inn != nil || w.OpenedInn() == 0 {
+		return nil
+	}
+	s, err := newInnScreen(g)
+	if err != nil {
+		return err
+	}
+	g.inn = s
+	return nil
+}
+
 // toggleTurnBased starts or ends turn-based mode (Enter). Only the clock part is there
 // yet: while it is on the game timer is stopped, so time and timers stand still; the
 // combat queue and rounds are M8/M9.
@@ -520,7 +554,7 @@ func (g *inGame) hover(in *Input) {
 //
 // mm8: 0x42f877 (msg 0x5e: globalTxt[0x1ad], class name, ": ", condition name)
 func (g *inGame) memberText(p *party.Player) string {
-	class := g.r.GlobalText(classNameGlobal + p.Class)
+	class := g.r.GlobalText(tables.ClassNameGlobal + p.Class)
 	s := fmt.Sprintf(g.r.GlobalText(0x1ad), p.Name, class) + ": "
 	if c := int(p.MainCondition()); c < len(conditionNames) {
 		s += g.r.GlobalText(conditionNames[c])
@@ -533,18 +567,25 @@ func (g *inGame) memberText(p *party.Player) string {
 //
 // mm8: 0x4c96cd (GuiGame_Draw)
 func (g *inGame) Draw(c *gfx.Canvas) {
-	if g.char != nil || g.chest != nil {
+	if g.char != nil || g.chest != nil || g.inn != nil {
 		// The screen's own draw, then the portrait panel with its basebar (a child of
 		// the screen with drawBasebar set), the status line and the pop-up.
-		if g.char != nil {
+		switch {
+		case g.char != nil:
 			g.char.draw(c)
-		} else {
+		case g.chest != nil:
 			g.chest.draw(c)
+		default:
+			g.inn.draw(c)
+			return
 		}
 		c.Blit(g.basebar, 0, 367)
 		g.r.Status.Draw(c, g.lucida)
 		g.portraits.draw(c)
 		if g.char != nil {
+			if g.char.dismissShown() {
+				g.char.dismiss.Draw(c) // a child after the portrait panel, over the basebar
+			}
 			g.char.drawOver(c, &g.lastIn)
 		} else {
 			g.chest.drawOver(c, &g.lastIn)

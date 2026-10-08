@@ -131,13 +131,7 @@ func (r *run) comparePlayer(p int, v Var, value uint32) bool {
 	case v == VarExp:
 		cur = int32(pl.Exp)
 	case v == VarItem:
-		// any of the 138 item slots (the worn ones too), else the mouse item
-		for k := range pl.Items {
-			if uint32(pl.Items[k].Number) == value {
-				return true
-			}
-		}
-		return uint32(m.MouseItem.Number) == value
+		return m.HasItem(p, int32(value))
 	case v >= VarBonusFirst && v < VarBaseFirst:
 		cur = int32(pl.Stats[v-VarBonusFirst].Bonus)
 	case v >= VarBaseFirst && v < VarActualFirst:
@@ -250,22 +244,6 @@ const (
 	speechBonus = 0x5b
 )
 
-// givenItem is the item Add and Set of the item variable put on the mouse: identified,
-// a found artifact recorded; Add also charges a wand.
-//
-// mm8: 0x449726 (case 0x11), 0x448d4b (case 0x11)
-func (r *run) givenItem(value uint32, charge bool) items.Item {
-	it := items.Item{Number: int32(value), Flags: items.FlagIdentified}
-	if value >= items.FirstArtifact && value < items.FirstArtifact+items.NumArtifacts {
-		r.m.ArtifactsFound[value-items.FirstArtifact] = true
-	}
-	if t := r.h.Ctx().Items; charge && t != nil && it.Number >= items.FirstWand && it.Number <= items.LastWand {
-		it.Charges = max(int32(r.h.Ctx().Rand.Int()%6+1+int(t.Item(it.Number).Mod2)), 1)
-		it.MaxCharges = uint8(it.Charges)
-	}
-	return it
-}
-
 // addPlayer is Add of member variable v for member p (in the party). The portrait's
 // sparkle (0x97) and the sound are M9's and M11's.
 //
@@ -309,9 +287,7 @@ func (r *run) addPlayer(p int, v Var, value uint32) {
 			pl.Exp = 4000000000
 		}
 	case v == VarItem:
-		if t := ctx.Items; t != nil {
-			m.SetMouseItem(t, r.givenItem(value, true))
-		}
+		m.GiveItem(int32(value), true, ctx)
 	case v >= VarBonusFirst && v < VarResistFirst:
 		f, base := statPtr(pl, v)
 		*f += int16(value)
@@ -458,7 +434,7 @@ func (r *run) setPlayer(p int, v Var, value uint32) {
 			if party.IsFemale(pl.Face) {
 				f = 0x1b
 			}
-			pl.Face, pl.Voice = f, f // (the portrait reloads with M7d's rebuild of the faces)
+			pl.Face, pl.Voice = f, f // the portrait panel reloads the face (portraits.sync)
 		}
 	case v == VarHP:
 		pl.HP = int32(value)
@@ -485,9 +461,7 @@ func (r *run) setPlayer(p int, v Var, value uint32) {
 	case v == VarExp:
 		pl.Exp = int64(int32(value))
 	case v == VarItem:
-		if t := ctx.Items; t != nil {
-			m.SetMouseItem(t, r.givenItem(value, false))
-		}
+		m.GiveItem(int32(value), false, ctx)
 	case v >= VarBonusFirst && v < VarResistFirst:
 		f, base := statPtr(pl, v)
 		*f = int16(uint8(value))

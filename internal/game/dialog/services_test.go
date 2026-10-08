@@ -338,16 +338,6 @@ func TestBlocked(t *testing.T) {
 	}
 }
 
-// TestDeferredServices: learning skills is M7d's: the menu stays.
-func TestDeferredServices(t *testing.T) {
-	h := serviceHost(t)
-	d := openProprietor(t, h, 26)
-	clickService(d, SvcLearn)
-	if d.Menu != 1 || len(d.Buttons) != 4 {
-		t.Errorf("learn opened %#x", d.Menu)
-	}
-}
-
 // TestEnterExit: the "Other Exits" portrait's Enter leaves for the exit's map, at the
 // arrival table's point for a negative quest bit.
 //

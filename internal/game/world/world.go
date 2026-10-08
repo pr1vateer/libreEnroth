@@ -146,6 +146,7 @@ type World struct {
 	// dialogue reply (0xffd350).
 	MessageText, ReplyText string
 	dialog                 *dialog.Dialog
+	inn                    int // the Adventurer's Inn's house shown, 0 none
 	message                *message
 	tex                    *TextureCache
 	tables                 *Tables

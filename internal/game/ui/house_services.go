@@ -5,6 +5,7 @@ import (
 	"image"
 	"strings"
 
+	"libre-enroth/internal/assets/tables"
 	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/gfx"
@@ -88,14 +89,19 @@ func colour(ink gfx.Color16) string { return fmt.Sprintf("\f%05d", ink) }
 // mm8: 0x4b3dec (House_Draw: the per-type draws)
 func (s *dialogScreen) servicePanel(hover int) servicePanel {
 	d, f := s.d, s.art.arrus
-	if d.Menu == 1 && d.Blocked() {
+	if (d.Menu == 1 || d.Menu == dialog.SvcLearn) && d.Blocked() {
 		// mm8: 0x4b22c1 (the buttons stop working)
 		t := d.BlockedText()
 		return servicePanel{draw: func(c *gfx.Canvas, _ int) { centredText(c, f, t, 0xd4, 0x65, inkYellow) }}
 	}
+	if d.Menu == dialog.SvcLearn {
+		return s.learnPanel()
+	}
 	switch t := d.Type; {
 	case t >= dialog.TypeWeapons && t <= dialog.TypeAlchemy:
 		return s.shopPanel()
+	case t == dialog.TypeTraining:
+		return s.trainingPanel()
 	case t >= 0xc && t <= 0xf:
 		return s.guildPanel()
 	case t == dialog.TypeTownHall:
@@ -120,7 +126,7 @@ var guildLabels = map[int]int{
 	0x75: 0x11f, 0x76: 0x120, dialog.SvcLearn: 0xa0,
 }
 
-// guildPanel is a guild's main menu: its spell shelves and Learn Skills (M7d), spread
+// guildPanel is a guild's main menu: its spell shelves and Learn Skills, spread
 // over 0x95 pixels from 0xa2; or a school's shelf.
 //
 // mm8: 0x4b6b98 (menu 1, 0x6e..0x76)
@@ -349,6 +355,66 @@ func (s *dialogScreen) travelPanel(hover int) servicePanel {
 // mm8: 0x4b5dac
 func (s *dialogScreen) drawPrison(c *gfx.Canvas) {
 	centredText(c, s.art.arrus, s.r.GlobalText(0x2a0), 0x136, 0x12, inkYellow)
+}
+
+// learnPanel is the Learn Skills menu: "Skill Cost: %lu" at 0x92, then the skills the
+// selected member's class has and the member does not know, spread over 0x95 from 0xa2
+// (the others' buttons are moved out of reach); with none, "Seek knowledge elsewhere".
+// The shops and the training halls highlight in inkHover, the guilds, temples and
+// taverns in yellow; the refusal is inkHover in the weapon, armour and alchemy shops,
+// yellow in taverns, white elsewhere.
+//
+// mm8: 0x4b5618 (menu 0x60), the same block in 0x4b9b5b, 0x4bb328, 0x4b5e2c, 0x4ba6f6,
+// 0x4b6b98, 0x4b7cf2, 0x4b8cde
+func (s *dialogScreen) learnPanel() servicePanel {
+	d, f, g := s.d, s.art.arrus, s.r.GlobalText
+	p := s.selectedPlayer()
+	if p == nil {
+		return servicePanel{draw: func(*gfx.Canvas, int) {}}
+	}
+	hi, none := inkYellow, inkWhite
+	switch d.Type {
+	case dialog.TypeWeapons, dialog.TypeArmour, dialog.TypeAlchemy:
+		hi, none = inkHover, inkHover
+	case dialog.TypeMagic, dialog.TypeTraining:
+		hi = inkHover
+	case dialog.TypeTavern:
+		none = inkYellow
+	}
+	var bs []dialog.Button
+	var labels []string
+	for _, b := range d.Buttons {
+		if sk := b.Param - dialog.LearnCode0; d.CanLearn(p, sk) {
+			bs = append(bs, b)
+			labels = append(labels, g(tables.SkillNameGlobal[sk]))
+		}
+	}
+	if len(bs) == 0 {
+		t := fmt.Sprintf(g(0x220), p.Name, g(tables.ClassNameGlobal+p.Class)) + "\n \n" + g(0x210)
+		return servicePanel{draw: func(c *gfx.Canvas, _ int) { centredText(c, f, t, 0xae, 0x8a, none) }}
+	}
+	header := fmt.Sprintf(cDecimal(g(0x191)), d.LearnPrice())
+	spots := spread(f, bs, labels, 0x95, 0xa2, 0x20)
+	return servicePanel{spots: spots, draw: func(c *gfx.Canvas, hover int) {
+		f.DrawCentered(c, panelRect, 0, 0x92, 0, header, 3)
+		drawSpots(c, f, spots, hover, hi)
+	}}
+}
+
+// trainingPanel is a training hall's main menu: the Train line (the offer, the
+// experience still needed, or the cap's answer) and Learn Skills, spread over 0xae from
+// 0x8a.
+//
+// mm8: 0x4b5618 (menu 1)
+func (s *dialogScreen) trainingPanel() servicePanel {
+	d, f, g := s.d, s.art.arrus, s.r.GlobalText
+	p := s.selectedPlayer()
+	if d.Menu != 1 || len(d.Buttons) != 2 || p == nil {
+		return servicePanel{draw: func(*gfx.Canvas, int) {}}
+	}
+	labels := []string{d.TrainingLabel(p), g(0xa0)}
+	spots := spread(f, d.Buttons, labels, 0xae, 0x8a, 0)
+	return servicePanel{spots: spots, draw: func(c *gfx.Canvas, hover int) { drawSpots(c, f, spots, hover, inkHover) }}
 }
 
 // globals returns global.txt strings.

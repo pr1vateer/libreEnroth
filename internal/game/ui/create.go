@@ -52,20 +52,6 @@ const (
 // mm8: 0x4c7a10 (GuiPartyCreate_Build)
 var statNameGlobal = [7]int{144, 116, 163, 75, 1, 211, 136}
 
-// Skill names: global.txt index per skill id, as Txt_LoadGlobal copies them into the
-// skill name table (0xbb2f58); id 39 is "None".
-//
-// mm8: 0x45181f (Txt_LoadGlobal)
-var skillNameGlobal = [numSkills + 1]int{
-	0x10f, 0x110, 0x111, 0x112, 0x113, 0x114, 0x115, 0x116, 0x117, 0x118,
-	0x119, 0x11a, 0x11b, 0x11c, 0x11d, 0x11e, 0x121, 0x122, 0x123, 0x11f,
-	0x120, 0x2b5, 0x2b6, 0x2b7, 0x124, 0x125, 0x126, 0x127, 0x128, 0x129,
-	0xea, 300, 0x32, 0x4d, 0x58, 0x59, 0x5a, 0x5f, 0x12d, 0x99,
-}
-
-// Class names are global.txt 0x2a5 + class id (Txt_LoadGlobal 0x45181f).
-const classNameGlobal = 0x2a5
-
 // ClassForFace maps a portrait to its class: faces come in groups per race.
 //
 // mm8: 0x49119b (Player_ClassForFace)
@@ -176,11 +162,11 @@ func newPartyCreate(r *Resources) (*partyCreate, error) {
 	for i, g := range statNameGlobal {
 		p.statNames[i] = l.global(g)
 	}
-	for i, g := range skillNameGlobal {
+	for i, g := range tables.SkillNameGlobal {
 		p.skillName[i] = l.global(g)
 	}
 	for i := range p.className {
-		p.className[i] = l.global(classNameGlobal + i)
+		p.className[i] = l.global(tables.ClassNameGlobal + i)
 	}
 
 	// Labels, all in create.fnt; h is its height.
