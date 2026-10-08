@@ -47,7 +47,6 @@ type tri struct {
 	lights             []PointLight
 	xw, yw, zw         plane // world position/depth, for lights
 	id                 uint32
-	tint               uint32 // 0xRRGGBB light multiplier, 0 = none
 }
 
 // pv is a projected vertex.
@@ -73,7 +72,6 @@ type Renderer struct {
 	sky  *sky
 	vbuf [2][]cv
 	id   uint32
-	tint uint32 // the billboard being queued
 }
 
 // SetID tags the primitives queued from now on: where they write depth they write id
@@ -171,9 +169,6 @@ type Billboard struct {
 	L, F                     float64
 	Tex                      *Texture
 	Flags                    Flags
-	// Tint, when not 0, multiplies the light per channel by 0xRRGGBB / 255: the
-	// Direct3D vertex colour of a tinted monster (D3D_ModulateColor 0x4a147a).
-	Tint uint32
 }
 
 // Billboard queues a billboard at the depth of its anchor.
@@ -196,10 +191,8 @@ func (r *Renderer) Billboard(b *Billboard) {
 	}
 	a := corner(x0, y0, b.U0, b.V0)
 	c := corner(x1, y1, b.U1, b.V1)
-	r.tint = b.Tint
 	r.addTri([3]pv{a, corner(x1, y0, b.U1, b.V0), c}, b.Tex, b.Flags, nil)
 	r.addTri([3]pv{a, c, corner(x0, y1, b.U0, b.V1)}, b.Tex, b.Flags, nil)
-	r.tint = 0
 }
 
 // snap rounds to 1/16 pixel, so shared edges are walked identically.
@@ -242,7 +235,7 @@ func (r *Renderer) addTri(p [3]pv, tex *Texture, flags Flags, lights []PointLigh
 		return plane{a0 - float64(ax*p[0].x) - float64(ay*p[0].y), ax, ay}
 	}
 	t := tri{
-		tex: tex, flags: flags, id: r.id, tint: r.tint,
+		tex: tex, flags: flags, id: r.id,
 		x: [3]float64{p[0].x, p[1].x, p[2].x}, y: [3]float64{p[0].y, p[1].y, p[2].y},
 		ymin: ymin, ymax: ymax,
 		iw: mk(p[0].iw, p[1].iw, p[2].iw),
@@ -375,11 +368,7 @@ func (r *Renderer) span(t *tri, y, xa, xb int) {
 					c = unpremul(c, a)
 				}
 			}
-			if t.tint != 0 {
-				c = shadeTint(c, l, fg, fogC, t.tint)
-			} else {
-				c = shade(c, l, fg, fogC)
-			}
+			c = shade(c, l, fg, fogC)
 			if blend {
 				c = (c>>1)&0x7f7f7f7f + (f.Pix[i]>>1)&0x7f7f7f7f
 			}
@@ -491,13 +480,6 @@ func shadeRGB(c uint32, lr, lg, lb, fg int64, fogC uint32) uint32 {
 		c = lerp2(c, fogC, uint32(clamp64(fg>>8, 0, 256)))
 	}
 	return c
-}
-
-// shadeTint is shade with the light multiplied per channel by tint (0xRRGGBB, each
-// channel / 255).
-func shadeTint(c uint32, l, fg int64, fogC uint32, tint uint32) uint32 {
-	ch := func(t uint32) int64 { return l * int64(t) / 255 }
-	return shadeRGB(c, ch(tint>>16&0xff), ch(tint>>8&0xff), ch(tint&0xff), fg, fogC)
 }
 
 // unpremul restores the colour of a partly covered texel.

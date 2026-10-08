@@ -138,21 +138,21 @@ type view struct {
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "e77d32bbaf561036fa7f2c8f99acb3b09e20d306f3f3513793ad9f0468af99e5",
-	"out01_town":  "2eacdfc65e0d2aa3b0d8eabd8dd6b6d9be63001a61ef146660a451158ccde5e1",
+	"out01_spawn": "25731855575c6104c7c5fa79dda2176a2a82e81f4102537a7f645b9c7d9e5ada",
+	"out01_town":  "ec03119b655761cd40dfab48db759d6df8d591c57246894832a9ce1041634856",
 	"out01_sky":   "a5caaa4d4265bad848b159407492b0d09f981bf0743cf0cd95017b6007b52b68",
 	"out02_wide":  "cddbc4073a608b1aa5d0a6164a4453772e9e37d10e17a91b6126bd346827a001",
 	"d05_start":   "39151aeebcf3da875b8cc19cedcfb6b1bb2cb9a87112b19a108c20dc9749af38",
 	"d05_door":    "c3de256d2c17f28211c18b58b21b3529064da596003150fb95c3d77a79e6799e",
 	"d13_torch":   "bdede009ba188dc6ddc6ca43dde95a5bbb8a3271d0626b00d35d45edaa3e8110",
-	"d16_start":   "cd0a81085bd49511267c27de29d9b28f01005bdb79a542904965f27d9675f20c",
-	"d28_stairs":  "f1d531a5de3885047ed2576b4547bf8ba023a830cb6e0b7c5f2698c17dbedf22",
+	"d16_start":   "23af5fec8878f212756504dd677340e1645f5f4344bfb3f219e446df408f7f49",
+	"d28_stairs":  "d0c04b7a2c01bcf7e1664cbe1d252d4e6eadd5ce627fe4382a9a3396faeaa79a",
 	"d28_climb":   "e61b434fab1b2a818a6df159cea06345c7bc33cf8d2ea653cee177409322bc88",
-	"out01_run":   "e5e806f509d40ba70d6bef84f991a89a857ff8ed821e9cfe6510d15cdf57faa1",
+	"out01_run":   "d7c992f5f5e92865873a4fc5c263aebd89f4a71b4434636fb1bfcf2195637d33",
 	"d05_walk":    "0d411990e53e2b8089ff5dc45d8ad1dcb2dd3f645d6bf7abf9891fe7d1f45b3d",
 	"d05_click":   "a56ed09721ec0ea3c7058f825d1d08f4a5b4e1ae9d16ae40d1881d520d9153cd",
 	// M6
-	"npc_dialog":     "063c1b5cd1a4307ed47b8066d63378e6777b8b69b0eee3c9051767e626596ee6",
+	"npc_dialog":     "4eb299cc91b7a86ec4f2596049133f2037c2f5cbd0e92ac9d7ae9b2dfb27de00",
 	"house_resident": "8a1d602c3ff48599bf4fed6ea9dbeb657dbc2f0c118ba6a191932d93a956b876",
 	"evt_message":    "95f2d6cd86d60db5d249adbba67277ef2424cd7b1109ef63c9937bd6cf932332",
 	// M6c
@@ -179,9 +179,9 @@ var worldHashes = map[string]string{
 	"teacher_topic":  "655fde40df79d5477b125598ba44b8d0215263d25a93b85d48ceab107d4eeb67",
 	"inn_roster":     "372b92c2515917b29a72149c83cbfebe1e3d19c3bbe62e9893837bf9ee12f308",
 	// M8a
-	"out01_actors": "e2b3639dcb4cf4cd2b796d23d324afd4a44d743cd28044a2be0712ae69c07315",
-	"d05_spawned":  "03a5d0385af81c7a115d80d8f064a54db155d4a64892e212362de43bd8058045",
-	"hover_actor":  "40ed01a4eab3d5b17893deaa1d26560aa666b85fd387bcde359ca8606ea314d7",
+	"out01_actors": "f2ca33a0b66a0434ad85cffe6fec16535e27decbc74f052c338a2898679120c1",
+	"d05_spawned":  "83fad542b7c2cbbf5a3c07fe5ba552ce3759208e91e70cdc1e562f74371e5bcf",
+	"hover_actor":  "96bfde9f7c8dcfe0df57643fb729d83fa06d7612e1474dec349414d5058e9901",
 }
 
 var views = []view{

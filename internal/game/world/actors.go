@@ -436,11 +436,6 @@ func (w *World) actorBillboard(i int, a *monsters.Actor, cam *render.Camera, clk
 		k := 1 / float64(uint16(b.Power))
 		bb.Left, bb.Right, bb.Top, bb.Bottom = bb.Left*k, bb.Right*k, bb.Top*k, bb.Bottom*k
 	}
-	if mt := w.monsterTables(); tex.HWL && mt != nil {
-		if id := a.ID() - 1; id >= 0 && id < len(mt.MonList) {
-			bb.Tint = mt.MonList[id].Tint & 0xffffff
-		}
-	}
 	return bb, fr, true
 }
 

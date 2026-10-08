@@ -20,14 +20,12 @@ type Tex struct {
 	*render.Texture
 	OrigW, OrigH int
 	Crop         image.Rectangle // sprites: the part of the OrigW x OrigH frame Texture shows
-	// HWL marks a d3dsprite.hwl sprite: drawn in its stored colours, so monster variants
-	// differ by their dmonlist tint (the sprites.lod fallback uses the frame's palette).
-	HWL bool
 }
 
 // TextureCache loads textures the way the Direct3D renderer does: d3dbitmap.hwl and
-// d3dsprite.hwl first, then bitmaps.lod / sprites.lod with their pal%03d palettes.
-// Missing names are remembered as nil.
+// d3dsprite.hwl first, then bitmaps.lod / sprites.lod with their pal%03d palettes;
+// sprite frames with a palette of their own come from sprites.lod (SpritePal). Missing
+// names are remembered as nil.
 type TextureCache struct {
 	d        *assets.Data
 	bitmaps  map[string]*Tex
@@ -128,24 +126,31 @@ func (c *TextureCache) Sprite(name string) *Tex {
 	return t
 }
 
-// SpritePal loads a billboard sprite for a sprite frame with palette pal (pal%03d): the
-// hwl sprite when there is one (its colours are fixed), else sprites.lod drawn with that
-// palette, so that monster variants sharing sprites keep their colours. pal 0 is the
-// sprite's own palette.
+// SpritePal loads a billboard sprite for a sprite frame with palette pal (pal%03d), the
+// way the software renderer does: a frame whose palette is not the sprite's own (the
+// monster variants A/B/C share sprites and differ by palette) is drawn from sprites.lod
+// with that palette; any other frame uses Sprite (the hwl sprite when there is one).
+// pal 0 is the sprite's own palette.
+//
+// The Direct3D renderer instead draws the hwl sprite (stored once, in the base colours)
+// multiplied by the dmonlist tint (Screen_DrawBillboardD3D 0x4a42b7), which casts the
+// whole monster green, blue or magenta; libre-enroth keeps the palettes.
 //
 // mm8: 0x44beaa (SFT_LoadSprites: Palette_Load(frame.palette)), 0x4acd0f
 func (c *TextureCache) SpritePal(name string, pal int) *Tex {
 	if pal == 0 {
 		return c.Sprite(name)
 	}
-	if t := c.Sprite(name); t == nil || t.HWL {
-		return t
-	}
 	k := palKey{strings.ToLower(name), pal}
 	if t, ok := c.palSpr[k]; ok {
 		return t
 	}
-	t := c.lodSpritePal(name, pal)
+	var t *Tex
+	if s, err := sprite.Load(c.d.Sprites, name); err != nil || s.PaletteID == pal {
+		t = c.Sprite(name)
+	} else {
+		t = c.spriteWithPal(s, pal)
+	}
 	c.palSpr[k] = t
 	return t
 }
@@ -166,19 +171,19 @@ func spriteTex(h *hwl.Texture) *Tex {
 	if crop.Empty() {
 		crop = image.Rect(0, 0, h.OrigW, h.OrigH)
 	}
-	return &Tex{Texture: render.FromARGB1555(h.W, h.H, h.Pix), OrigW: h.OrigW, OrigH: h.OrigH, Crop: crop, HWL: true}
+	return &Tex{Texture: render.FromARGB1555(h.W, h.H, h.Pix), OrigW: h.OrigW, OrigH: h.OrigH, Crop: crop}
 }
 
-func (c *TextureCache) lodSprite(name string) *Tex { return c.lodSpritePal(name, 0) }
-
-func (c *TextureCache) lodSpritePal(name string, palID int) *Tex {
+func (c *TextureCache) lodSprite(name string) *Tex {
 	s, err := sprite.Load(c.d.Sprites, name)
 	if err != nil {
 		return nil
 	}
-	if palID == 0 {
-		palID = s.PaletteID
-	}
+	return c.spriteWithPal(s, s.PaletteID)
+}
+
+// spriteWithPal converts sprites.lod sprite s with palette palID.
+func (c *TextureCache) spriteWithPal(s *sprite.Sprite, palID int) *Tex {
 	pal := c.palette(palID)
 	if pal == nil {
 		return nil
