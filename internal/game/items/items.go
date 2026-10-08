@@ -21,7 +21,7 @@ type Item struct {
 	Slot       uint8 // +0x18
 	MaxCharges uint8 // +0x19
 	Owner      uint8 // +0x1a the lich jar's owner (1-based member)
-	_          uint8 // +0x1b
+	Unk1b      uint8 // +0x1b
 	Expires    int64 // +0x1c a temporary bonus's end (game time)
 }
 

@@ -29,6 +29,9 @@ type All struct {
 	// and stat tables of the executable.
 	Items   *Items
 	Classes *Classes
+	// Monsters are monsters.txt, placemon.txt, hostile.txt, dmonlist.bin, dobjlist.bin and
+	// MapStats.txt's rows.
+	Monsters *Monsters
 }
 
 // Load reads the tables from the language LODs and the house clip and travel tables
@@ -76,6 +79,9 @@ func Load(d *assets.Data) (*All, error) {
 		return nil, err
 	}
 	if a.Learning, err = ReadLearning(d.Exe); err != nil {
+		return nil, err
+	}
+	if a.Monsters, err = LoadMonsters(d); err != nil {
 		return nil, err
 	}
 	return a, nil

@@ -197,6 +197,92 @@ func encodeEvent(e int) int {
 	return 0 // "Error in encode event"
 }
 
+// Interactive decorations keep their events in map variables 0x4b.. (0x7c of them).
+const (
+	decVarBase = 0x4b
+	decVarMax  = 0x7c
+)
+
+// setEventVar stores the map variable of decoration i (its +0x1c).
+func (w *World) setEventVar(i, v int) {
+	switch {
+	case w.indoor != nil:
+		w.indoor.Map.Decorations[i].EventVar = int16(v)
+	case w.outdoor != nil:
+		w.outdoor.Map.Decorations[i].EventVar = int16(v)
+	}
+}
+
+// decorationEvent is the global event an interactive decoration of ddeclist index idx
+// offers on a new visit: one rand() always, a second for the kinds with a choice.
+//
+// mm8: 0x44f3e7
+func decorationEvent(idx int, rng interface{ Int() int }) int {
+	rng.Int()
+	fixed := map[int]int{
+		0xc0: 0x11a, 0xc1: 0x11d, 0xc3: 0x11f, 0xc4: 0x11b, 0xc5: 0x11c, 0xc6: 0x121, 0xc8: 0x11e,
+	}
+	switch {
+	case fixed[idx] != 0:
+		return fixed[idx]
+	case idx == 0xc2:
+		return rng.Int()%5 + 0x114
+	case idx == 0xc7 || idx == 0xe3:
+		return rng.Int()%8 + 0x10c
+	case idx >= 0xc9 && idx <= 0xcc:
+		return rng.Int()%7 + 0x21f + 7*(idx-0xc9)
+	case idx >= 0xcd && idx <= 0xd8:
+		return idx - 0xcd + 0x213
+	}
+	return 0
+}
+
+// initInteractiveDecorations gives each interactive decoration without an event of its
+// own a map variable 0x4b + n holding a random event, on a first visit or a respawn.
+//
+// mm8: 0x44f66c (Map_InitInteractiveDecorations)
+func (w *World) initInteractiveDecorations() {
+	mv := w.MapVars()
+	if mv == nil {
+		return
+	}
+	clear(mv[decVarBase : decVarBase+decVarMax+1])
+	n := 0
+	for i := range w.numDecorations() {
+		d := w.decoration(i)
+		if d.event != 0 || !interactive(*d.idx) || n >= decVarMax {
+			continue
+		}
+		w.setEventVar(i, decVarBase+n)
+		mv[decVarBase+n] = byte(encodeEvent(decorationEvent(*d.idx, w.S.Ctx.Rand)))
+		n++
+	}
+}
+
+// assignDecorationVars numbers the interactive decorations' map variables again on every
+// load and hides those whose variable is empty (used up).
+//
+// mm8: 0x45f895 (Level_Load decorations loop), 0x48041d (Outdoor_InitDecorations)
+func (w *World) assignDecorationVars() {
+	mv := w.MapVars()
+	if mv == nil {
+		return
+	}
+	n := 0
+	for i := range w.numDecorations() {
+		d := w.decoration(i)
+		if d.event != 0 || !interactive(*d.idx) || n >= decVarMax {
+			continue
+		}
+		w.setEventVar(i, decVarBase+n)
+		if mv[decVarBase+n] == 0 {
+			*d.flags |= decHidden
+			w.updateDecorationCollision(i)
+		}
+		n++
+	}
+}
+
 // runDecoration runs a decoration's event: its map event, or for an interactive one
 // the global event its map variable holds. Reports whether there was one.
 func (w *World) runDecoration(i int) bool {
@@ -282,7 +368,8 @@ func (w *World) decRadius(i int) float64 {
 
 // Click handles a left click in the view at UI point (x, y): a decoration less than
 // 512 units (beyond its radius) away runs its event, a clickable face less than 512
-// away its event; another face says "Nothing here". Items and monsters are M7/M8's.
+// away its event; another face says "Nothing here". An item on the ground is picked up,
+// a friendly actor talks.
 //
 // mm8: 0x421a65 (Evt_Click)
 func (w *World) Click(x, y int) {
@@ -305,6 +392,10 @@ func (w *World) Click(x, y int) {
 			return
 		}
 		w.NothingHere()
+	case pidActor:
+		w.clickActor(pid, depth, w.shift)
+	case pidObject:
+		w.clickObject(pid, depth)
 	}
 }
 
@@ -388,8 +479,12 @@ func (w *World) interactObject(pid uint32) bool {
 		}
 		w.RunEvent(event, true)
 		return true
+	case pidActor:
+		return w.interactActor(pidIndex(pid))
+	case pidObject:
+		return w.interactItem(pidIndex(pid))
 	}
-	return false // items and monsters: M7/M8
+	return false
 }
 
 // Hover is the status line text for UI point (x, y) in the view: the hint of a face's
@@ -426,6 +521,10 @@ func (w *World) Hover(x, y int) string {
 		case *d.idx > 0 && *d.idx < len(w.tables.Decs):
 			return w.tables.Decs[*d.idx].GameName
 		}
+	case pidActor:
+		return w.hoverActor(pid, depth)
+	case pidObject:
+		return w.hoverObject(pid, depth)
 	}
 	return ""
 }

@@ -92,6 +92,10 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - **F3** switches to the old free camera (**W/S/A/D**, **Space/C** up and down, **Shift**
     faster, right-drag looks around); **F4/F5** toggle flying and water walking.
   - **F2** (indoors) opens every closed door and closes every open one.
+  - **F6** kills the nearest monster, **F7** freezes the monsters (debug).
+  - The status line names the monster or the item under the mouse; a click on an item on
+    the ground (or **Space** before it) picks it up, and a click on a friendly monster that
+    is an NPC talks to it.
   - **+/−** next to the minimap zoom it (outdoors).
   - **1–5** or a click on a portrait selects a party member; the selected member again
     opens the **character screen**:

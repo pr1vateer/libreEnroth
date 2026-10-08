@@ -124,6 +124,10 @@ type World struct {
 	FreeCamOn bool
 	// AlwaysRun is the KEY_ALWAYSRUN toggle (U).
 	AlwaysRun bool
+	// AIFrozen stops the monsters (debug key F7).
+	AIFrozen bool
+	// shift is the Shift key as of the last update (Evt_Click's GetAsyncKeyState(0x10)).
+	shift bool
 	// Clock is the time of day the view is lit for and the animation clock; Update
 	// sets the hour and minute from the session's calendar.
 	Clock Clock
@@ -162,9 +166,10 @@ type World struct {
 var _ ui.World = (*World)(nil)
 
 // Load opens a map from games.lod, with its .ddm/.dlv template, into session s (nil:
-// a new session with a one-member party), and runs its map-load events. A map visited
-// before in the session comes back as it was left. After a MoveToMap the party arrives
-// where it said.
+// a new session with a one-member party), spawns its monsters and items on the first
+// visit, and runs its map-load events. A map visited before in the session comes back
+// as it was left, until its MapStats refill days have passed: then the template returns
+// with new spawns. After a MoveToMap the party arrives where it said.
 func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Session) (*World, error) {
 	if s == nil {
 		s = NewSession()
@@ -185,6 +190,21 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 		if w.indoor != nil {
 			w.indoor.settleDoors()
 		}
+	}
+	// The template comes back, and the spawn points run, on the first visit and once the
+	// MapStats refill days have passed (mm8: 0x498050 Blv_Load, 0x47df28 Odm_Load).
+	spawn := w.respawnDue()
+	if spawn && ok {
+		nw, err := load(d, tables, tex, name, s)
+		if err != nil {
+			return nil, err
+		}
+		nw.keepFrom(w)
+		s.worlds[key] = nw
+		w = nw
+	}
+	if spawn {
+		w.markSpawned()
 	}
 	w.group.Hooks = eventHooks{w: w}
 	if m := s.Party; m.Roster == nil && tables.Game != nil {
@@ -213,6 +233,9 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 	}
 	w.travel, w.transition, w.PartyDead = nil, nil, false
 	w.syncClock()
+	if err := w.loadMonsters(spawn); err != nil {
+		return nil, err
+	}
 	w.enter()
 	return w, nil
 }
@@ -328,7 +351,8 @@ func (w *World) Indoor() *Indoor { return w.indoor }
 // Update implements ui.World: one 60 Hz tick of the game loop: the clock (stopped in
 // turn-based mode), input, party movement and doors. Debug keys: F2 opens/closes
 // every door indoors, F3 toggles the free camera (leaving it puts the party where the
-// camera is), F4 the fly buff, F5 water walking.
+// camera is), F4 the fly buff, F5 water walking, F6 kills the nearest actor, F7
+// freezes the AI.
 //
 // mm8: 0x46261d (Game_Loop: Timer_Update, Party_UpdateTime unless the timer is paused
 // or stopped, then World_Tick)
@@ -358,6 +382,8 @@ func (w *World) Update(in *ui.Input) {
 	if in.Pressed(ui.KeyF5) {
 		w.group.WaterWalk = !w.group.WaterWalk
 	}
+	w.shift = in.Down(ui.KeyShift)
+	w.debugKeys(in)
 	if w.FreeCamOn {
 		w.Cam.Update(in)
 	} else {
@@ -536,7 +562,11 @@ func (w *World) Render(f *render.Frame) {
 		w.cam.Far = distMist
 		w.cam.Prepare()
 		w.r.Begin(f, &w.cam)
-		w.outdoor.Draw(&w.r, &w.cam, w.Clock)
+		sun := SunAt(w.Clock.Hour, w.Clock.Minute)
+		light := func(x, y, z, depth float64, sector int) float64 { return sun.OutdoorLight(0, depth) }
+		w.outdoor.Draw(&w.r, &w.cam, w.Clock,
+			func() { w.drawActors(&w.r, &w.cam, w.Clock, light) },
+			func() { w.drawObjects(&w.r, &w.cam, light) })
 		w.r.End()
 	}
 	if w.indoor != nil {
@@ -544,7 +574,13 @@ func (w *World) Render(f *render.Frame) {
 		w.cam.Far = indoorFar
 		w.cam.Prepare()
 		w.r.Begin(f, &w.cam)
-		w.indoor.Draw(&w.r, &w.cam, f, w.Clock)
+		w.indoor.Draw(&w.r, &w.cam, f, w.Clock, func(torch *render.PointLight) {
+			light := func(x, y, z, depth float64, sector int) float64 {
+				return w.indoor.billboardLight(sector, x, y, z, torch)
+			}
+			w.drawObjects(&w.r, &w.cam, light)
+			w.drawActors(&w.r, &w.cam, w.Clock, light)
+		})
 		w.r.End()
 	}
 }

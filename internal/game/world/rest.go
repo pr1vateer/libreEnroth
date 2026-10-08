@@ -88,41 +88,35 @@ func (w *World) RestFood() int {
 	return 2
 }
 
-// MapStats.txt columns of the random encounter chances (Txt_LoadMapStats 0x452a82:
-// row +0x30..+0x32).
-const (
-	statEncounter = 12
-	statMonster1  = 13
-	statMonster2  = 14
-)
-
 // RestEncounter rolls the map's random encounter for a night's rest: the chance in
-// MapStats (a random map's when this one is not listed), then which of its three
-// monster types comes. It reports monsters that arrived; spawning them is M8, so it
-// is false for now, after drawing the same random numbers.
+// MapStats (a random row's, 1..0x4d, when this map is not listed), then which of its
+// three monster types comes. It reports monsters that arrived; spawning them is M8c's,
+// so it is false for now, after drawing the same random numbers.
 //
 // mm8: 0x42f877 (msg 0x61), 0x44f0da (Rest_SpawnEncounter)
 func (w *World) RestEncounter() bool {
 	rng := w.S.Ctx.Rand
-	row := w.statsRow(w.tables.MapIndex(w.name))
+	mt := w.monsterTables()
+	if mt == nil {
+		return false
+	}
+	row := mt.MapStatsRow(w.tables.MapIndex(w.name))
 	if row == nil {
-		row = w.statsRow(rng.Int()%w.tables.numMaps() + 1)
+		// rand() % g_mapStats.count + 1: the row past the last (0x4d) has no chances.
+		row = mt.MapStatsRow(rng.Int()%len(mt.MapStats) + 1)
 	}
-	cell := func(c int) int {
-		if row == nil || c >= len(row) {
-			return 0
-		}
-		v, _ := strconv.Atoi(strings.TrimSpace(row[c]))
-		return v
+	var enc, kind1, kind2 int
+	if row != nil {
+		enc, kind1, kind2 = int(row.Encounter), int(row.EncounterKind[0]), int(row.EncounterKind[1])
 	}
-	if rng.Int()%100+1 > cell(statEncounter) {
+	if rng.Int()%100+1 > enc {
 		return false
 	}
 	roll := rng.Int()%100 + 1
 	kind := 1
-	if cell(statMonster1) < roll {
+	if kind1 < roll {
 		kind = 2
-		if cell(statMonster1)+cell(statMonster2) < roll {
+		if kind1+kind2 < roll {
 			kind = 3
 		}
 	}
@@ -144,19 +138,6 @@ func (w *World) statsRow(n int) []string {
 		}
 	}
 	return nil
-}
-
-// numMaps is the number of MapStats.txt rows (0x5e818c).
-func (t *Tables) numMaps() int {
-	n := 0
-	for _, row := range t.MapStats.Rows {
-		if len(row) > 2 {
-			if _, err := strconv.Atoi(strings.TrimSpace(row[0])); err == nil {
-				n++
-			}
-		}
-	}
-	return max(n, 1)
 }
 
 // RestDone is called when a full rest ends: the outdoor sun follows the clock (the

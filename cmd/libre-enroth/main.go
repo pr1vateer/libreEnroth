@@ -11,7 +11,8 @@
 // 1-5 or a click on a portrait selects a party member, the selected one again opens the
 // character screen (S, K, I, A pages; Esc). A click in the view or Space
 // (the object in the middle of the view) runs a door's, lever's or decoration's event.
-// Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking.
+// Debug keys: F2 doors, F3 free camera, F4 fly buff, F5 water walking, F6 kills the
+// nearest monster, F7 freezes the monsters.
 // Free camera: W/S or Up/Down move, A/D strafe, Left/Right turn, PgUp/PgDn pitch,
 // Space/C up and down, Shift faster, right mouse drag looks around.
 package main

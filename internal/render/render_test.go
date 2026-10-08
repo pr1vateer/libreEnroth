@@ -342,3 +342,19 @@ func TestPick(t *testing.T) {
 		t.Errorf("outside the frame: %d %g", id, d)
 	}
 }
+
+// A tinted billboard multiplies its light per channel by the tint (the Direct3D vertex
+// colour of a monster variant, 0x4a42b7 / 0x4a147a).
+func TestBillboardTint(t *testing.T) {
+	f := NewFrame(64, 48)
+	f.Clear(0)
+	var r Renderer
+	r.Begin(f, testCam(64, 48))
+	r.Billboard(&Billboard{X: 200, Left: -100, Right: 100, Top: 100, Bottom: -100, U1: 1, V1: 1, L: 1,
+		Tex: solid(RGB(200, 200, 200)), Tint: 0x7eff9d})
+	r.End()
+	c := f.Pix[24*64+32]
+	if got, want := c, RGB(98, 200, 122); got != want {
+		t.Errorf("tinted pixel %#x, want %#x", got, want)
+	}
+}

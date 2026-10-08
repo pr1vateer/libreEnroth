@@ -28,7 +28,7 @@ var scriptKeys = map[string]Key{
 	"shift": KeyShift, "ctrl": KeyControl, "pgup": KeyPageUp, "pgdn": KeyPageDown,
 	"home": KeyHome, "end": KeyEnd, "insert": KeyInsert, "delete": KeyDelete,
 	"space": KeySpace, "enter": KeyEnter, "esc": KeyEscape, "tab": KeyTab,
-	"f1": KeyF1, "f2": KeyF2, "f3": KeyF3, "f4": KeyF4, "f5": KeyF5,
+	"f1": KeyF1, "f2": KeyF2, "f3": KeyF3, "f4": KeyF4, "f5": KeyF5, "f6": KeyF6, "f7": KeyF7,
 	"[": KeyBracketLeft, "]": KeyBracketRight,
 }
 

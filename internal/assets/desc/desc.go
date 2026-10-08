@@ -217,6 +217,107 @@ func (s *SFT) At(first, t int) int {
 	return min(i, len(s.Frames)-1)
 }
 
+// AtReverse is At with the sequence played backwards: the frame at length - t's offset.
+//
+// mm8: 0x44c2bc (SFT_GetFrameReverse)
+func (s *SFT) AtReverse(first, t int) int {
+	if first < 0 || first >= len(s.Frames) {
+		return first
+	}
+	f := &s.Frames[first]
+	if f.Flags&FrameHasMore == 0 || f.Length == 0 {
+		return first
+	}
+	rem := f.Length - (t>>3)%f.Length
+	i := first
+	for i < len(s.Frames) && s.Frames[i].Time < rem {
+		rem -= s.Frames[i].Time
+		i++
+	}
+	return min(i, len(s.Frames)-1)
+}
+
+// stricmp is the C runtime's _stricmp: bytes compared lower-cased, unsigned.
+func stricmp(a, b string) int {
+	lower := func(c byte) byte {
+		if 'A' <= c && c <= 'Z' {
+			return c + 'a' - 'A'
+		}
+		return c
+	}
+	for i := 0; ; i++ {
+		var ca, cb byte
+		if i < len(a) {
+			ca = lower(a[i])
+		}
+		if i < len(b) {
+			cb = lower(b[i])
+		}
+		if ca != cb || ca == 0 {
+			return int(ca) - int(cb)
+		}
+	}
+}
+
+// FindGroup is the first frame of the sequence named name (case-insensitive), 0 when there
+// is none. The search is the original's: a binary search over the sorted sequences that
+// turns linear once fewer than 5 remain.
+//
+// mm8: 0x44c1ad (SFT_FindGroup), 0x44c1d4 (SFT_BinarySearch)
+func (s *SFT) FindGroup(name string) int {
+	key := func(i int) string {
+		if f := s.EIndex[i]; f >= 0 && f < len(s.Frames) {
+			return s.Frames[f].Group
+		}
+		return ""
+	}
+	found := -1
+	linear := func(lo, hi int) {
+		found = -1
+		for i := lo; i < hi; i++ {
+			if stricmp(name, key(i)) == 0 {
+				found = i
+				return
+			}
+		}
+	}
+	lo, hi := 0, len(s.EIndex)
+	for {
+		n := hi - lo
+		mid := n/2 + lo
+		c := 0
+		if mid < len(s.EIndex) {
+			c = stricmp(name, key(mid))
+		} else {
+			c = -1
+		}
+		if c == 0 {
+			found = mid
+		}
+		if lo == hi {
+			found = -1
+			break
+		}
+		if c < 0 {
+			if n < 5 {
+				linear(lo, hi)
+				break
+			}
+			hi = mid
+			continue
+		}
+		if n <= 4 {
+			linear(lo, hi)
+			break
+		}
+		lo = mid
+	}
+	if found < 0 {
+		return 0
+	}
+	return s.EIndex[found]
+}
+
 // ViewNames returns the sprites.lod / d3dsprite.hwl names of the 8 views of frame f
 // and which views are drawn mirrored.
 //

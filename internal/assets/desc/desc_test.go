@@ -2,6 +2,7 @@ package desc
 
 import (
 	"encoding/binary"
+	"strings"
 	"testing"
 
 	"libre-enroth/internal/assets"
@@ -64,6 +65,38 @@ func TestSFT(t *testing.T) {
 	}
 	if s.At(3, 999) != 3 {
 		t.Error("single frame animated")
+	}
+	// Backwards: 9 - (t >> 3) % 9 into the times 2, 3, 4 (mm8: 0x44c2bc).
+	for _, c := range []struct{ tick, want int }{{0, 2}, {8, 2}, {32, 1}, {40, 1}, {64, 0}, {72, 2}} {
+		if got := s.AtReverse(0, c.tick); got != c.want {
+			t.Errorf("AtReverse(0, %d) = %d, want %d", c.tick, got, c.want)
+		}
+	}
+}
+
+// FindGroup: the binary search narrows while 5 or more remain, then scans; an absent
+// name is frame 0.
+//
+// mm8: 0x44c1ad, 0x44c1d4
+func TestFindGroup(t *testing.T) {
+	names := []string{"alpha", "Bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india"}
+	s := &SFT{}
+	for i, n := range names {
+		s.Frames = append(s.Frames, Frame{Group: n})
+		s.EIndex = append(s.EIndex, i)
+	}
+	// Frame indices differ from the sorted positions.
+	s.EIndex = []int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+	for i, n := range names {
+		if g := s.FindGroup(n); g != i {
+			t.Errorf("FindGroup(%q) = %d, want %d", n, g, i)
+		}
+	}
+	if s.FindGroup("BRAVO") != 1 || s.FindGroup("aaa") != 0 || s.FindGroup("zulu") != 0 || s.FindGroup("") != 0 {
+		t.Error("case or absent names")
+	}
+	if (&SFT{}).FindGroup("x") != 0 {
+		t.Error("empty table")
 	}
 }
 
@@ -200,6 +233,17 @@ func TestShipped(t *testing.T) {
 	sft, err := ParseSFT(load("dsft.bin"))
 	if err != nil || len(sft.Frames) != 7641 || len(sft.EIndex) != 1775 {
 		t.Fatalf("dsft: %v", err)
+	}
+	// Every sequence name finds a sequence of that name (a few names, e.g. m429f, have
+	// two sequences; the search lands on one of them).
+	for _, f := range sft.EIndex {
+		n := sft.Frames[f].Group
+		if g := sft.FindGroup(n); !strings.EqualFold(sft.Frames[g].Group, n) {
+			t.Errorf("FindGroup(%q) = %d (%q)", n, g, sft.Frames[g].Group)
+		}
+	}
+	if g := sft.FindGroup("M401S"); g != 942 || sft.FindGroup("nosuchgroup") != 0 {
+		t.Errorf("FindGroup(M401S) = %d", g)
 	}
 	for i, dec := range dl {
 		if dec.SFT < 0 || dec.SFT >= len(sft.Frames) {

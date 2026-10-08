@@ -480,7 +480,7 @@ const torchRadius = 800
 // sector (free camera) all sectors are drawn.
 //
 // mm8: 0x43d049 (Indoor_DrawWorld), 0x4b0ef5 (Indoor_DrawFaceHW)
-func (in *Indoor) Draw(r *render.Renderer, cam *render.Camera, f *render.Frame, clk Clock) {
+func (in *Indoor) Draw(r *render.Renderer, cam *render.Camera, f *render.Frame, clk Clock, billboards func(torch *render.PointLight)) {
 	m := in.Map
 	full := rect{0, 0, float64(f.W), float64(f.H)}
 	if !in.visibleSectors(cam, full) {
@@ -511,6 +511,9 @@ func (in *Indoor) Draw(r *render.Renderer, cam *render.Camera, f *render.Frame, 
 		k := float64(sky.W) / float64(sky.OrigW)
 		drift := float64(clk.Ticks) * 0xe0 / 65536
 		r.Sky(sky.Texture, 512, k/8, drift*k, drift*k, 1.0/32, 1)
+	}
+	if billboards != nil {
+		billboards(&torch)
 	}
 	in.drawDecorations(r, cam, &torch, clk)
 }
@@ -677,17 +680,28 @@ func (in *Indoor) drawDecorations(r *render.Renderer, cam *render.Camera, torch 
 			bb.X, bb.Y, bb.Z = x, y, z
 			bb.L = 1
 			if fr.Flags&desc.FrameLuminous == 0 {
-				l := float64(max(0xf8-8*int(s.MinAmbient), 0)) / 255
-				if dist := math.Sqrt((x-torch.X)*(x-torch.X) + (y-torch.Y)*(y-torch.Y) + (z-torch.Z)*(z-torch.Z)); dist < torch.Radius {
-					l += 1 - dist/torch.Radius
-				}
-				bb.L = min(l, 1)
+				bb.L = in.billboardLight(si, x, y, z, torch)
 			}
 			r.SetID(decorationPID(int(di)))
 			r.Billboard(&bb)
 			r.SetID(0)
 		}
 	}
+}
+
+// billboardLight is a sprite's light in sector si: the sector's ambient plus the party's
+// torch.
+//
+// mm8: 0x43d6fa (Indoor_AddDecorationBillboard)
+func (in *Indoor) billboardLight(si int, x, y, z float64, torch *render.PointLight) float64 {
+	l := 0.0
+	if si > 0 && si < len(in.Map.Sectors) {
+		l = float64(max(0xf8-8*int(in.Map.Sectors[si].MinAmbient), 0)) / 255
+	}
+	if dist := math.Sqrt((x-torch.X)*(x-torch.X) + (y-torch.Y)*(y-torch.Y) + (z-torch.Z)*(z-torch.Z)); dist < torch.Radius {
+		l += 1 - dist/torch.Radius
+	}
+	return min(l, 1)
 }
 
 // MapMarkers reports nothing yet: the indoor automap draws outlines (M6).

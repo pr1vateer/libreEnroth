@@ -38,7 +38,7 @@ func DecodeItem(b []byte) Item {
 	return Item{
 		Number: int32(le.Uint32(b)), Bonus: int32(le.Uint32(b[4:])), Strength: int32(le.Uint32(b[8:])),
 		Special: int32(le.Uint32(b[0xc:])), Charges: int32(le.Uint32(b[0x10:])), Flags: le.Uint32(b[0x14:]),
-		Slot: b[0x18], MaxCharges: b[0x19], Owner: b[0x1a], Expires: int64(le.Uint64(b[0x1c:])),
+		Slot: b[0x18], MaxCharges: b[0x19], Owner: b[0x1a], Unk1b: b[0x1b], Expires: int64(le.Uint64(b[0x1c:])),
 	}
 }
 
@@ -51,7 +51,7 @@ func (it *Item) Encode(b []byte) {
 	le.PutUint32(b[0xc:], uint32(it.Special))
 	le.PutUint32(b[0x10:], uint32(it.Charges))
 	le.PutUint32(b[0x14:], it.Flags)
-	b[0x18], b[0x19], b[0x1a], b[0x1b] = it.Slot, it.MaxCharges, it.Owner, 0
+	b[0x18], b[0x19], b[0x1a], b[0x1b] = it.Slot, it.MaxCharges, it.Owner, it.Unk1b
 	le.PutUint64(b[0x1c:], uint64(it.Expires))
 }
 
@@ -279,9 +279,9 @@ func GenerateArtifact(it *Item, t *tables.Items, rng Rand, found *[NumArtifacts]
 	return true
 }
 
-// goldPile makes it a pile of gold for treasure level 1..6 (another level leaves it
+// GoldPile makes it a pile of gold for treasure level 1..6 (another level leaves it
 // empty).
-func goldPile(it *Item, level int, rng Rand) {
+func GoldPile(it *Item, level int, rng Rand) {
 	*it = Item{}
 	var amount int
 	switch level {
@@ -315,7 +315,7 @@ func GenerateChests(chests []Chest, t *tables.Items, ct *tables.Chests, treasure
 	treasure = min(max(treasure, 0), 6)
 	make1 := func(it *Item, level int, identified bool) {
 		if pick < 60 {
-			goldPile(it, level, rng)
+			GoldPile(it, level, rng)
 			if identified {
 				it.Flags |= FlagIdentified
 			}

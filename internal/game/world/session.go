@@ -7,6 +7,7 @@ import (
 	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/ui"
+	"libre-enroth/internal/maps/delta"
 )
 
 // Status receives the timed status line texts (Status_SetTimed 0x44a847); the UI
@@ -42,6 +43,9 @@ type Session struct {
 	deferredNPC int
 	// timerScan is the game time of the last timer scan (0x587db0, Timers.Scan).
 	timerScan clock.Time
+	// lastDelta is the state of the last indoor and outdoor map entered: Map_IsAlert reads
+	// the location header of the other kind (0x44f967).
+	lastDelta [2]*delta.Delta
 }
 
 type noStatus struct{}

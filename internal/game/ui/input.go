@@ -33,6 +33,8 @@ const (
 	KeyF5
 	KeyInsert
 	KeyControl
+	KeyF6
+	KeyF7
 )
 
 // Punctuation keys, as Windows virtual-key codes (the original binds strafing to them).

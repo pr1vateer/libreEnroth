@@ -138,21 +138,21 @@ type view struct {
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "7b0fb22b8057b8d063b3d0343776f7c5417c19f1499c678107a9986ea015a70f",
-	"out01_town":  "f1edec5eb155675a187e3dfa9f3f44350d2666d2aca9c7877442ad21abe97ea2",
+	"out01_spawn": "e77d32bbaf561036fa7f2c8f99acb3b09e20d306f3f3513793ad9f0468af99e5",
+	"out01_town":  "2eacdfc65e0d2aa3b0d8eabd8dd6b6d9be63001a61ef146660a451158ccde5e1",
 	"out01_sky":   "a5caaa4d4265bad848b159407492b0d09f981bf0743cf0cd95017b6007b52b68",
 	"out02_wide":  "cddbc4073a608b1aa5d0a6164a4453772e9e37d10e17a91b6126bd346827a001",
 	"d05_start":   "39151aeebcf3da875b8cc19cedcfb6b1bb2cb9a87112b19a108c20dc9749af38",
 	"d05_door":    "c3de256d2c17f28211c18b58b21b3529064da596003150fb95c3d77a79e6799e",
 	"d13_torch":   "bdede009ba188dc6ddc6ca43dde95a5bbb8a3271d0626b00d35d45edaa3e8110",
-	"d16_start":   "5ff9357815c4e29b80b1e721d16d7d8172b36d861551118e7ec6b24de892ed90",
-	"d28_stairs":  "4611bddef0140ac496bc78efd66f0e0fb685d1be516efa3cd8427b31111f506a",
+	"d16_start":   "cd0a81085bd49511267c27de29d9b28f01005bdb79a542904965f27d9675f20c",
+	"d28_stairs":  "f1d531a5de3885047ed2576b4547bf8ba023a830cb6e0b7c5f2698c17dbedf22",
 	"d28_climb":   "e61b434fab1b2a818a6df159cea06345c7bc33cf8d2ea653cee177409322bc88",
-	"out01_run":   "6c1c9522234f6a1c2be942aa1f806b52766c5ecb683dd66e97b4d1cb08a9abd3",
+	"out01_run":   "e5e806f509d40ba70d6bef84f991a89a857ff8ed821e9cfe6510d15cdf57faa1",
 	"d05_walk":    "0d411990e53e2b8089ff5dc45d8ad1dcb2dd3f645d6bf7abf9891fe7d1f45b3d",
 	"d05_click":   "a56ed09721ec0ea3c7058f825d1d08f4a5b4e1ae9d16ae40d1881d520d9153cd",
 	// M6
-	"npc_dialog":     "c2db329648ee87a25bfab1868f6427357e11df7586844cdbb4a5d6b38d66f0c7",
+	"npc_dialog":     "063c1b5cd1a4307ed47b8066d63378e6777b8b69b0eee3c9051767e626596ee6",
 	"house_resident": "8a1d602c3ff48599bf4fed6ea9dbeb657dbc2f0c118ba6a191932d93a956b876",
 	"evt_message":    "95f2d6cd86d60db5d249adbba67277ef2424cd7b1109ef63c9937bd6cf932332",
 	// M6c
@@ -163,21 +163,25 @@ var worldHashes = map[string]string{
 	"transition_d05": "028f4f90d84a1ba719c2cddfd5ad5fc0ca93dca83613606ff25e3553c28e69b1",
 	"edge_out02":     "d721897ec89a68958b95ffaf071f81dd956457a0b56154ef72a7efc4645384c8",
 	// M7b
-	"chest_open":  "f9751353f2a27291b1e08921747506024e4a678440d31e4439ee6b6a49b687cb",
-	"chest_popup": "ad0b5dd556614b88d8f6675b63540ebb1f424285004b4c2f83bbabf22228b4f6",
+	"chest_open":  "c2622bfc8cde0d40f87c3c8e963e6cd81e882217feb3aca9abd9420ed51bc873",
+	"chest_popup": "3f7093e3a403ac80f2a15cb6ea2530d997ea7ad406890f14a32ca254b7e2794b",
 	// M7c
-	"shop_weapon":    "1edfb734fbc565cbde3711965cdd88dba63577eda1b6a4772f20da89d600f61d",
-	"shop_armor":     "f3fc2047589f1fed1ac5db0bdeca20aee228cde83d44de499d5099da468ca2d4",
-	"shop_magic":     "dd25680217e57a57dd4785a37273503ff84eeeaa02f23744483609146722b75a",
-	"shop_alchemist": "1bd05799f63e0b718d40893aff402c929385a48cb64d1eb0fbecb75aada30eae",
-	"guild_shelf":    "c0b0601688374680cf13b0056d15650392c3daf41bcb7c256621d8f39937ef42",
+	"shop_weapon":    "cbb4ef9ff2b1a04aec0646a2f0b831317999529cf31fffce115eb5ce884c3fa5",
+	"shop_armor":     "d42478e123be7206875bb20575ab85fed524baf9904cbdf12544fa7aab47a686",
+	"shop_magic":     "bd80435c332f2e3f3b71d743701eb23675c721819f61a3408a27f3c813fbaab4",
+	"shop_alchemist": "d11835db565f4a405a02f77b481db034a50b7d9ec3b1aa6f970880f38bee5f92",
+	"guild_shelf":    "28a557afb717dd5cc2a5de73945fb1bf9c2ab5a5a9f10948984304f30bd5f4ea",
 	"shop_sell":      "04416850a246afb8c77088a7733166d50d3f26ad3713975271d9f1faa36dafb3",
-	"shop_popup":     "fe1595a1d3151d75515f2fa173baa0637e26482614224cdf8991c2759283a185",
+	"shop_popup":     "cbb4ef9ff2b1a04aec0646a2f0b831317999529cf31fffce115eb5ce884c3fa5",
 	// M7d
 	"house_learn":    "44bad96ad4163d71544e76a72b90e67af33f372319768078d361a5e0d9c137d5",
 	"house_training": "0dd41d711cea0e15442b1e7275c27b13ab58f49071fe6d5939cf61f37b2ad11a",
 	"teacher_topic":  "655fde40df79d5477b125598ba44b8d0215263d25a93b85d48ceab107d4eeb67",
 	"inn_roster":     "372b92c2515917b29a72149c83cbfebe1e3d19c3bbe62e9893837bf9ee12f308",
+	// M8a
+	"out01_actors": "e2b3639dcb4cf4cd2b796d23d324afd4a44d743cd28044a2be0712ae69c07315",
+	"d05_spawned":  "03a5d0385af81c7a115d80d8f064a54db155d4a64892e212362de43bd8058045",
+	"hover_actor":  "40ed01a4eab3d5b17893deaa1d26560aa666b85fd387bcde359ca8606ea314d7",
 }
 
 var views = []view{
@@ -308,6 +312,15 @@ var views = []view{
 		}
 		w.SpeakInHouse(185)
 	}, click: "-:2,Click@120/80:1,Mouse@300/300:20", w: 640, h: 480, hour: 9},
+	// M8a: out01's actors as the map loads them (a guard on the path, villagers further).
+	{name: "out01_actors", mapName: "out01.odm", party: &FreeCam{X: 5880, Y: 6950, Z: 740, Yaw: 512},
+		click: "Mouse@600/50:2", w: 640, h: 480, hour: 9},
+	// M8a: d05's lower hall with the couatls its spawn points made.
+	{name: "d05_spawned", mapName: "d05.blv", party: &FreeCam{X: 3328, Y: 1200, Z: -1000, Yaw: 512},
+		click: "Mouse@600/50:2", w: 640, h: 480},
+	// M8a: the mouse on the guard: its name on the status line.
+	{name: "hover_actor", mapName: "out01.odm", party: &FreeCam{X: 5880, Y: 6950, Z: 740, Yaw: 512},
+		click: "Mouse@325/200:20", w: 640, h: 480, hour: 9},
 }
 
 func TestGolden(t *testing.T) {

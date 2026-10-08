@@ -219,6 +219,10 @@ func mapKey(k ebiten.Key) (ui.Key, bool) {
 		return ui.KeyF4, true
 	case ebiten.KeyF5:
 		return ui.KeyF5, true
+	case ebiten.KeyF6:
+		return ui.KeyF6, true
+	case ebiten.KeyF7:
+		return ui.KeyF7, true
 	case ebiten.KeyInsert:
 		return ui.KeyInsert, true
 	case ebiten.KeyControlLeft, ebiten.KeyControlRight:

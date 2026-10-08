@@ -147,16 +147,23 @@ func (o *Outdoor) MapMarkers(fn func(x, y float64)) {
 	}
 }
 
-// Draw queues the scene: sky, terrain, buildings, decorations.
+// Draw queues the scene: sky, terrain, buildings, then actors (when given), decorations
+// and objects in the original's billboard order.
 //
 // mm8: 0x47b25b (outdoor D3D: 0x479f2d sky, 0x47893a buildings, 0x4808b6 terrain,
-// 0x47b61b decorations)
-func (o *Outdoor) Draw(r *render.Renderer, cam *render.Camera, clk Clock) {
+// 0x47c1d2 actors, 0x47b61b decorations, 0x47bca5 objects)
+func (o *Outdoor) Draw(r *render.Renderer, cam *render.Camera, clk Clock, actors, objects func()) {
 	sun := SunAt(clk.Hour, clk.Minute)
 	o.drawSky(r, clk)
 	o.drawTerrain(r, cam, &sun, clk)
 	o.drawModels(r, cam, &sun, clk)
+	if actors != nil {
+		actors()
+	}
 	o.drawDecorations(r, cam, &sun, clk)
+	if objects != nil {
+		objects()
+	}
 }
 
 // drawSky: a plane 512 units above the eye, 8 world units per texel, drifting 0x1c0/65536

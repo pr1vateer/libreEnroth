@@ -130,9 +130,12 @@ const (
 
 // Spawn is one 0x18-byte spawn point.
 type Spawn struct {
-	Pos  Vec3   // +0x00
-	Kind uint16 // +0x0e: 3 = item
-	Raw  [0x18]byte
+	Pos    Vec3   // +0x00
+	Radius uint16 // +0x0c
+	Kind   uint16 // +0x0e: 3 = monsters, anything else an item (Level_Load 0x45f895)
+	Index  uint16 // +0x10: the MapStats monster slot / the item level
+	Attrib uint16 // +0x12: 1 = only on an alert map
+	Group  uint32 // +0x14: the monsters' group
 }
 
 // Map is a parsed outdoor map.
@@ -227,9 +230,8 @@ func Parse(b []byte) (*Map, error) {
 	m.Spawns = make([]Spawn, nSpawn)
 	for i := range m.Spawns {
 		s := r.Record(0x18)
-		copy(m.Spawns[i].Raw[:], s)
-		m.Spawns[i].Pos = Vec3{s.I32(0), s.I32(4), s.I32(8)}
-		m.Spawns[i].Kind = s.U16(0xe)
+		m.Spawns[i] = Spawn{Pos: Vec3{s.I32(0), s.I32(4), s.I32(8)}, Radius: s.U16(0xc), Kind: s.U16(0xe),
+			Index: s.U16(0x10), Attrib: s.U16(0x12), Group: s.U32(0x14)}
 	}
 	if err := r.Err(); err != nil {
 		return nil, fmt.Errorf("odm: %w", err)
