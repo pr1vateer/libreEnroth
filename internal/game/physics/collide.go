@@ -353,3 +353,117 @@ func (s *State) SweepCylinder(c Cylinder) (int32, bool) {
 	d := along - int32(Isqrt(uint32(rr*rr-side*side)))
 	return max(d, 0), true
 }
+
+// ContainsVertexPoint is the line-of-sight tests' point-in-face check: the face's
+// plain vertices (no displacements) projected by its attributes, the crossings counted
+// with the rounded intersection.
+//
+// mm8: 0x4080d8 (Face_ContainsPointLOS), 0x4082f1 (ModelFace_ContainsPointLOS)
+func (p *Poly) ContainsVertexPoint(x, y, z int32) bool {
+	n := p.NumVerts()
+	if n <= 0 {
+		return false
+	}
+	u := make([]int32, n+1)
+	v := make([]int32, n+1)
+	var pu, pv int32
+	for i := range n {
+		a := p.vtx(i)
+		switch {
+		case p.Attr&AttrXYPlane != 0:
+			u[i], v[i] = int32(a.X), int32(a.Y)
+		case p.Attr&AttrXZPlane != 0:
+			u[i], v[i] = int32(a.X), int32(a.Z)
+		default:
+			u[i], v[i] = int32(a.Y), int32(a.Z)
+		}
+	}
+	switch {
+	case p.Attr&AttrXYPlane != 0:
+		pu, pv = x, y
+	case p.Attr&AttrXZPlane != 0:
+		pu, pv = x, z
+	default:
+		pu, pv = y, z
+	}
+	u[n], v[n] = u[0], v[0]
+	count := 0
+	prev := pv <= v[0]
+	for k := 0; k < n && count < 2; k++ {
+		cur := pv <= v[k+1]
+		if cur != prev {
+			side := 0
+			if u[k+1] < pu {
+				side |= 2
+			}
+			if u[k] < pu {
+				side |= 1
+			}
+			if side == 0 {
+				count++
+			} else if side != 3 {
+				slope := Div16(u[k+1]-u[k], v[k+1]-v[k])
+				if pu <= (Mul16((pv-v[k])<<16, slope)+0x8000)>>16+u[k] {
+					count++
+				}
+			}
+		}
+		prev = cur
+	}
+	return count == 1
+}
+
+// SweepActor tests the lower sphere's sweep against an actor's cylinder (base centre
+// x, y, z, radius and height) and records the hit as pid when it is the nearest. Unlike
+// the decorations' test, only the actor's base must be below the path's height at the
+// closest point. It reports a touch whether or not it was the nearest hit.
+//
+// mm8: 0x46e143 (Collide_Actor)
+func (s *State) SweepActor(x, y, z, radius, height, pid int32) bool {
+	if s.BBox[0] > x+radius || x-radius > s.BBox[1] || s.BBox[2] > y+radius || y-radius > s.BBox[3] ||
+		s.BBox[4] > height+z || z > s.BBox[5] {
+		return false
+	}
+	dx, dy := x-s.PosLo[0], y-s.PosLo[1]
+	rr := s.RadiusLo + radius
+	side := (s.Dir[1]*dx - s.Dir[0]*dy) >> 16
+	if abs32(side) > rr {
+		return false
+	}
+	along := (s.Dir[1]*dy + s.Dir[0]*dx) >> 16
+	if along <= 0 || z > s.PosLo[2]+Mul16(along, s.Dir[2]) {
+		return false
+	}
+	d := max(along-int32(Isqrt(uint32(rr*rr-side*side))), 0)
+	s.record(d, pid)
+	return true
+}
+
+// SweepParty tests a monster's sweep against the party, a cylinder twice its radius:
+// the path's height at the closest point must be within the party's (or anywhere
+// above its feet when any).
+//
+// mm8: 0x46f14e (Collide_Party)
+func (s *State) SweepParty(x, y, z, radius, height int32, any bool) {
+	r := radius * 2
+	if s.BBox[0] > x+r || x-r > s.BBox[1] || s.BBox[2] > y+r || y-r > s.BBox[3] ||
+		s.BBox[4] > height+z || z > s.BBox[5] {
+		return
+	}
+	dx, dy := x-s.PosLo[0], y-s.PosLo[1]
+	rr := s.RadiusLo + r
+	side := (s.Dir[1]*dx - s.Dir[0]*dy) >> 16
+	if abs32(side) > rr {
+		return
+	}
+	along := (s.Dir[0]*dx + s.Dir[1]*dy) >> 16
+	if along <= 0 {
+		return
+	}
+	pz := s.PosLo[2] + Mul16(along, s.Dir[2])
+	if z > pz || pz > z+height && !any {
+		return
+	}
+	d := max(along-int32(Isqrt(uint32(rr*rr-side*side))), 0)
+	s.record(d, 4)
+}

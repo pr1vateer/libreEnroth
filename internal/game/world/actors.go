@@ -735,7 +735,7 @@ func (w *World) talkToActor(a *monsters.Actor) {
 	}
 }
 
-// debugKeys: F6 kills the nearest actor (M8c brings Actor_Die), F7 freezes the AI.
+// debugKeys: F6 kills the nearest actor (Actor_Die; its loot is M8c's), F7 freezes the AI.
 func (w *World) debugKeys(in *ui.Input) {
 	if in.Pressed(ui.KeyF7) {
 		w.AIFrozen = !w.AIFrozen
@@ -762,8 +762,7 @@ func (w *World) debugKeys(in *ui.Input) {
 	if best < 0 {
 		return
 	}
-	a := &dl.Actors[best]
-	a.HP = 0
-	a.AIState = monsters.Dead
-	a.UpdateAnimation(spriteSet{w})
+	if b := w.brain(); b != nil {
+		b.Die(best)
+	}
 }

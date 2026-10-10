@@ -95,6 +95,7 @@ type BSPNode [8]byte
 type BModel struct {
 	Name, Name2 string // +0x00, +0x20 char[32]
 	Flags       uint32 // +0x40
+	Position    Vec3   // +0x70: the line-of-sight test's model centre (0x408520)
 	BBoxMin     Vec3   // +0x7c: bounding box (Outdoor_FloorZ 0x46d6bb, Collide_Models 0x46ead9)
 	BBoxMax     Vec3   // +0x88
 	Center      Vec3   // +0xac: bounding sphere (0x479a4c culls with it)
@@ -252,6 +253,7 @@ func Parse(b []byte) (*Map, error) {
 func parseModel(r *binread.Reader, h binread.Rec, m *BModel) error {
 	m.Name, m.Name2 = h.Str(0, 32), h.Str(0x20, 32)
 	m.Flags = h.U32(0x40)
+	m.Position = Vec3{h.I32(0x70), h.I32(0x74), h.I32(0x78)}
 	m.BBoxMin = Vec3{h.I32(0x7c), h.I32(0x80), h.I32(0x84)}
 	m.BBoxMax = Vec3{h.I32(0x88), h.I32(0x8c), h.I32(0x90)}
 	m.Center = Vec3{h.I32(0xac), h.I32(0xb0), h.I32(0xb4)}

@@ -249,6 +249,10 @@ func (p *Party) MoveOutdoor(g *physics.OutdoorGeo, ticks int32) {
 		}
 		g.CollideModels(&s, true, true)
 		g.CollideCellDecorations(&s, cellX, cellY)
+		// Collide_Objects (projectiles hitting the party) is M9's.
+		if p.Obstacles != nil {
+			p.Obstacles.Collide(&s)
+		}
 		adj := s.AdjustedDist
 		hit := adj < s.MoveDist
 		nx, ny, nz := s.NewPosLo[0], s.NewPosLo[1], s.NewPosLo[2]-s.RadiusLo-1
@@ -298,6 +302,9 @@ func (p *Party) MoveOutdoor(g *physics.OutdoorGeo, ticks int32) {
 		x, y, z = nx, ny, nz
 		switch s.PID & 7 {
 		case physics.KindActor:
+			if p.Obstacles != nil {
+				p.Obstacles.Bumped()
+			}
 			p.unbind()
 		case physics.KindDecoration:
 			d := g.Decorations[s.PID>>3]

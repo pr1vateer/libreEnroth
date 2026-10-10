@@ -15,6 +15,7 @@ import (
 	"libre-enroth/internal/assets/txt"
 	"libre-enroth/internal/evt"
 	"libre-enroth/internal/game/dialog"
+	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/game/ui"
@@ -161,6 +162,8 @@ type World struct {
 	subTicks               int
 	// openChest is the chest an OpenChest event opened, until the screen closes.
 	openChest *ui.ChestView
+	// ai is the monsters' AI state (ai.go).
+	ai *monsters.Brain
 }
 
 var _ ui.World = (*World)(nil)
@@ -207,6 +210,7 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 		w.markSpawned()
 	}
 	w.group.Hooks = eventHooks{w: w}
+	w.group.Obstacles = actorObstacles{w: w}
 	if m := s.Party; m.Roster == nil && tables.Game != nil {
 		m.Roster = party.NewRoster(tables.Game.Roster, s.Ctx, &m.ArtifactsFound)
 	}
@@ -349,7 +353,8 @@ func (w *World) PartyState() *party.Party { return w.group }
 func (w *World) Indoor() *Indoor { return w.indoor }
 
 // Update implements ui.World: one 60 Hz tick of the game loop: the clock (stopped in
-// turn-based mode), input, party movement and doors. Debug keys: F2 opens/closes
+// turn-based mode), input, the monsters' AI, party and monster movement, doors and the
+// monsters' blows. Debug keys: F2 opens/closes
 // every door indoors, F3 toggles the free camera (leaving it puts the party where the
 // camera is), F4 the fly buff, F5 water walking, F6 kills the nearest actor, F7
 // freezes the AI.
@@ -386,9 +391,13 @@ func (w *World) Update(in *ui.Input) {
 	w.debugKeys(in)
 	if w.FreeCamOn {
 		w.Cam.Update(in)
+		w.thinkMonsters(int32(ticks))
+		w.moveMonsters(int32(ticks))
 	} else {
 		w.movePartyKeys(in)
+		w.thinkMonsters(int32(ticks))
 		w.moveParty(int32(ticks))
+		w.moveMonsters(int32(ticks))
 		w.proximity()
 	}
 	if w.indoor != nil {
@@ -397,6 +406,7 @@ func (w *World) Update(in *ui.Input) {
 		}
 		w.indoor.UpdateDoors(ticks)
 	}
+	w.strikeMonsters()
 }
 
 // syncClock lights the view for the calendar's time of day.

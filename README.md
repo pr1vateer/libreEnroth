@@ -96,6 +96,9 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - The status line names the monster or the item under the mouse; a click on an item on
     the ground (or **Space** before it) picks it up, and a click on a friendly monster that
     is an NPC talks to it.
+  - Monsters wander about their homes, hunt the party and each other, and strike in melee
+    (their missiles and spells come with M9); hostile monsters near keep the party from
+    resting.
   - **+/−** next to the minimap zoom it (outdoors).
   - **1–5** or a click on a portrait selects a party member; the selected member again
     opens the **character screen**:

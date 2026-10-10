@@ -133,6 +133,8 @@ type view struct {
 	click string
 	// setup runs on the loaded world before click (M6: open a dialogue).
 	setup func(w *World)
+	// frozen stops the monsters (F7), for views about something else.
+	frozen bool
 }
 
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
@@ -148,7 +150,7 @@ var worldHashes = map[string]string{
 	"d16_start":   "23af5fec8878f212756504dd677340e1645f5f4344bfb3f219e446df408f7f49",
 	"d28_stairs":  "d0c04b7a2c01bcf7e1664cbe1d252d4e6eadd5ce627fe4382a9a3396faeaa79a",
 	"d28_climb":   "e61b434fab1b2a818a6df159cea06345c7bc33cf8d2ea653cee177409322bc88",
-	"out01_run":   "d7c992f5f5e92865873a4fc5c263aebd89f4a71b4434636fb1bfcf2195637d33",
+	"out01_run":   "1e621b8cee4a217e61d71d23071032cfef0d0ac58227afe3dddfe7d6d42cc7bf",
 	"d05_walk":    "0d411990e53e2b8089ff5dc45d8ad1dcb2dd3f645d6bf7abf9891fe7d1f45b3d",
 	"d05_click":   "a56ed09721ec0ea3c7058f825d1d08f4a5b4e1ae9d16ae40d1881d520d9153cd",
 	// M6
@@ -182,6 +184,9 @@ var worldHashes = map[string]string{
 	"out01_actors": "f2ca33a0b66a0434ad85cffe6fec16535e27decbc74f052c338a2898679120c1",
 	"d05_spawned":  "83fad542b7c2cbbf5a3c07fe5ba552ce3759208e91e70cdc1e562f74371e5bcf",
 	"hover_actor":  "96bfde9f7c8dcfe0df57643fb729d83fa06d7612e1474dec349414d5058e9901",
+	// M8b
+	"out01_pursuit": "2e54f7fd9ba5cff3f091d511a63e8e4ef91722469409ac811bc86548fe4842fc",
+	"d05_melee":     "813750eba21222aff0dd33aed92414bb78e6d5bbb356f623e6069747b1ccd975",
 }
 
 var views = []view{
@@ -200,7 +205,7 @@ var views = []view{
 	{name: "d05_walk", mapName: "d05.blv", input: "Up:90,Right:20", w: 640, h: 480},
 	// M5: a click on d05's door (event 11) opens it; the mouse stays on it ("Door").
 	{name: "d05_click", mapName: "d05.blv", party: &FreeCam{X: 8512, Y: 2150, Z: -640, Yaw: 512},
-		click: "Click@320/200:1,Mouse@320/200:150", w: 640, h: 480},
+		click: "Click@320/200:1,Mouse@320/200:150", w: 640, h: 480, frozen: true},
 	// M6: S'ton's dialogue (out01 event 500's SpeakNPC 31), the mouse on his second topic.
 	{name: "npc_dialog", mapName: "out01.odm", setup: func(w *World) { w.SpeakNPC(31, true) },
 		click: "Mouse@556/224:2", w: 640, h: 480, hour: 10},
@@ -314,13 +319,19 @@ var views = []view{
 	}, click: "-:2,Click@120/80:1,Mouse@300/300:20", w: 640, h: 480, hour: 9},
 	// M8a: out01's actors as the map loads them (a guard on the path, villagers further).
 	{name: "out01_actors", mapName: "out01.odm", party: &FreeCam{X: 5880, Y: 6950, Z: 740, Yaw: 512},
-		click: "Mouse@600/50:2", w: 640, h: 480, hour: 9},
+		click: "Mouse@600/50:2", w: 640, h: 480, hour: 9, frozen: true},
 	// M8a: d05's lower hall with the couatls its spawn points made.
 	{name: "d05_spawned", mapName: "d05.blv", party: &FreeCam{X: 3328, Y: 1200, Z: -1000, Yaw: 512},
-		click: "Mouse@600/50:2", w: 640, h: 480},
+		click: "Mouse@600/50:2", w: 640, h: 480, frozen: true},
 	// M8a: the mouse on the guard: its name on the status line.
 	{name: "hover_actor", mapName: "out01.odm", party: &FreeCam{X: 5880, Y: 6950, Z: 740, Yaw: 512},
-		click: "Mouse@325/200:20", w: 640, h: 480, hour: 9},
+		click: "Mouse@325/200:20", w: 640, h: 480, hour: 9, frozen: true},
+	// M8b: three pirates south of Ravenshore's town see the party and close in.
+	{name: "out01_pursuit", mapName: "out01.odm", party: &FreeCam{X: 4000, Y: 3000, Z: 300, Yaw: 1536},
+		click: "Mouse@600/50:150", w: 640, h: 480, hour: 9},
+	// M8b: d05's lizardmen at the party's throat, its HP bar down.
+	{name: "d05_melee", mapName: "d05.blv", party: &FreeCam{X: -2950, Y: -1150, Z: 945, Yaw: 1650},
+		click: "Mouse@600/50:150", w: 640, h: 480},
 }
 
 func TestGolden(t *testing.T) {
@@ -335,6 +346,7 @@ func TestGolden(t *testing.T) {
 				a.Update(&ui.Input{Keys: []ui.Key{ui.KeyEscape}})
 			}
 			w.FreeCamOn = v.input == "" && v.party == nil // the M3 views
+			w.AIFrozen = v.frozen
 			if v.setup != nil {
 				v.setup(w)
 			}

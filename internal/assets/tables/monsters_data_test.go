@@ -103,3 +103,26 @@ func TestMonstersData(t *testing.T) {
 		t.Errorf("treasure %v", m.Treasure[7:14])
 	}
 }
+
+// spells.txt's schools ("Res"; none -> 4) and the exe's damage dice (0x4f6870).
+//
+// mm8: 0x45236e (Txt_LoadSpells)
+func TestSpellsData(t *testing.T) {
+	a, _ := load(t)
+	s := a.Spells
+	for _, c := range []struct {
+		id   int
+		want Spell
+	}{
+		{1, Spell{School: 4}},                                // Torch Light
+		{2, Spell{School: 0, Sides: 3, Flags: 7}},            // Fire Bolt
+		{11, Spell{School: 0, Add: 15, Sides: 15, Flags: 5}}, // Incinerate
+		{18, Spell{School: 1, Sides: 8, Flags: 7}},           // Lightning Bolt
+		{29, Spell{School: 4, Add: 9, Sides: 9, Flags: 5}},   // Acid Burst: "none"
+		{90, Spell{School: 10, Add: 25, Sides: 10, Flags: 7}},
+	} {
+		if got := s.At(c.id); got != c.want {
+			t.Errorf("spell %d: %+v, want %+v", c.id, got, c.want)
+		}
+	}
+}

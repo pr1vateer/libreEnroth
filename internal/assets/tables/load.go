@@ -32,6 +32,8 @@ type All struct {
 	// Monsters are monsters.txt, placemon.txt, hostile.txt, dmonlist.bin, dobjlist.bin and
 	// MapStats.txt's rows.
 	Monsters *Monsters
+	// Spells are the spells' schools and damage dice (spells.txt, the exe).
+	Spells Spells
 }
 
 // Load reads the tables from the language LODs and the house clip and travel tables
@@ -82,6 +84,9 @@ func Load(d *assets.Data) (*All, error) {
 		return nil, err
 	}
 	if a.Monsters, err = LoadMonsters(d); err != nil {
+		return nil, err
+	}
+	if a.Spells, err = LoadSpells(d); err != nil {
 		return nil, err
 	}
 	return a, nil

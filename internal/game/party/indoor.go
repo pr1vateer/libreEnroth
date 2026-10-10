@@ -144,6 +144,9 @@ func (p *Party) MoveIndoor(g *physics.IndoorGeo, ticks int32) {
 		for range maxIter {
 			g.CollideFaces(&s, true, true)
 			g.CollideDecorations(&s)
+			if p.Obstacles != nil {
+				p.Obstacles.Collide(&s)
+			}
 			if !g.CollidePortals(&s) {
 				break
 			}
@@ -175,6 +178,10 @@ func (p *Party) MoveIndoor(g *physics.IndoorGeo, ticks int32) {
 		sector = sec
 		s.TotalMoved += adj
 		switch s.PID & 7 {
+		case physics.KindActor:
+			if p.Obstacles != nil {
+				p.Obstacles.Bumped()
+			}
 		case physics.KindDecoration:
 			d := g.Decorations[s.PID>>3]
 			speed := int32(physics.Isqrt(uint32(vx*vx + vy*vy)))

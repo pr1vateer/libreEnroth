@@ -17,7 +17,7 @@ const (
 
 // RestRefusal is the global.txt message that keeps the party from resting where it
 // stands (0: it may rest): on water outdoors or while airborne or water walking (the
-// selected member also reacts, speech 0xd), with monsters near (M8: none yet), or in
+// selected member also reacts, speech 0xd), with hostile monsters near, or in
 // turn-based mode.
 //
 // mm8: 0x42f877 (msg 0x68: Terrain_HeightAt, 0x42e9d7 monsters near, Party +0x898,
@@ -49,11 +49,6 @@ func (w *World) RestRefusal() int {
 	}
 	return 0
 }
-
-// MonstersNear reports hostile monsters close to the party (M8).
-//
-// mm8: 0x42e9d7
-func (w *World) MonstersNear() bool { return false }
 
 // RestFood is the food a rest costs: 2, outdoors on the terrain by its tileset
 // (grass 1, snow and tileset 7 3, desert 5, volcanic and swamp 4), at least 1.

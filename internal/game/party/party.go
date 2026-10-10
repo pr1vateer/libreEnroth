@@ -64,6 +64,14 @@ type StepSurface struct {
 	GX, GY int   // outdoors: the terrain cell (row GridY-1)
 }
 
+// Obstacles are the map's actors as the party's sweeps meet them (M8b).
+type Obstacles interface {
+	// Collide sweeps s against the actors the party cannot walk through.
+	Collide(s *physics.State)
+	// Bumped: the party ran into an actor, which ends its invisibility.
+	Bumped()
+}
+
 // NoHooks ignores every hook.
 type NoHooks struct{}
 
@@ -106,6 +114,8 @@ type Party struct {
 
 	Actions Actions
 	Hooks   Hooks
+	// Obstacles are the actors the party bumps into (nil: none).
+	Obstacles Obstacles
 
 	lastGood [3]int32 // indoors: the last position with a floor (0x75e33c)
 	ticks    int64    // timer ticks moved so far: the flying bob's clock

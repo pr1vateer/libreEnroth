@@ -182,8 +182,14 @@ const (
 	NumPlayerBuffs = 27
 )
 
+// Party buffs (Party +0x8a8) the monsters read.
+const (
+	PartyBuffInvisibility = 11 // no monster targets the party; bumping into one ends it
+)
+
 // Player buffs the formulas read.
 const (
+	BuffReflect      = 10 // a monster's blow is dealt back to it (0x438625)
 	BuffPreservation = 11 // HP at 0 or below leaves the player unconscious, not dead
 	BuffRegeneration = 12
 	BuffMerchant     = 24 // replaces the merchant skill level with its power
