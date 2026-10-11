@@ -13,7 +13,6 @@ import (
 	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/physics"
 	"libre-enroth/internal/game/ui"
-	"libre-enroth/internal/maps/delta"
 	"libre-enroth/internal/render"
 )
 
@@ -167,7 +166,8 @@ func (w *World) keepFrom(old *World) {
 	dn.Notes = append(dn.Notes[:0], do.Notes...)
 }
 
-// loadMonsters does the monster part of a map load: the temporary objects go, the spawn
+// loadMonsters does the monster part of a map load: the actors are reset as after a
+// night's rest (Actors_ResetAfterRest 0x40928c), the temporary objects go, the spawn
 // points run when spawn is set (a first visit or a respawn) and the interactive
 // decorations get their events, the decorations' variables are numbered, the objects
 // settle and the actors get their sprites and the alert/dead fix-ups.
@@ -179,6 +179,9 @@ func (w *World) loadMonsters(spawn bool) error {
 		return nil
 	}
 	w.S.lastDelta[w.kind()] = dl
+	if b := w.brain(); b != nil {
+		b.ResetAfterRest(w.S.Party.Calendar.Hour)
+	}
 	w.removeTemporaryObjects()
 	row := w.mapStats()
 	alert := w.alert() // Level_Load reads it before loading
@@ -238,18 +241,9 @@ func (w *World) removeTemporaryObjects() {
 			continue
 		}
 		if o.Attrib&monsters.ObjTemporary != 0 || mt.ObjList[o.ObjList].Flags&tables.ObjNoPickup != 0 {
-			removeObject(dl, i)
+			monsters.RemoveObject(dl.Objects, i)
 		}
 	}
-}
-
-// removeObject frees object slot i (the record stays, marked removed; Object_Create
-// reuses the slot).
-//
-// mm8: 0x42ee3b (Object_Remove; its turn-based bookkeeping is M9's)
-func removeObject(dl *delta.Delta, i int) {
-	dl.Objects[i].ObjList = 0
-	dl.Objects[i].Attrib |= monsters.ObjRemoved
 }
 
 // settleObjects gives potions without a power one (rand() % 15 + 5) and applies the
@@ -624,47 +618,52 @@ func (w *World) pickUp(i int, onlyEmptyMouse bool) bool {
 			m.SetMouseItem(t, it)
 		}
 	}
-	removeObject(dl, i)
+	monsters.RemoveObject(dl.Objects, i)
 	return true
 }
 
-// clickObject and clickActor are Evt_Click's item and actor cases.
+// clickObject and clickActor are Evt_Click's item and actor cases. clickObject reports
+// an item picked up; clickActor reports a click it leaves to the thrown mouse item (a
+// friendly actor or a corpse too far away).
 //
 // mm8: 0x421a65 (Evt_Click)
-func (w *World) clickObject(pid uint32, depth float64) {
+func (w *World) clickObject(pid uint32, depth float64) bool {
 	i := pidIndex(pid)
 	objs, mt := w.Objects(), w.monsterTables()
 	if i >= len(objs) || i >= monsters.MaxObjects || objs[i].ObjList == 0 || mt == nil ||
 		mt.ObjList[objs[i].ObjList].Flags&tables.ObjNoPickup != 0 || depth >= clickDepth {
-		return
+		return false
 	}
-	w.pickUp(i, false)
+	return w.pickUp(i, false)
 }
 
-func (w *World) clickActor(pid uint32, depth float64, shift bool) {
+func (w *World) clickActor(pid uint32, depth float64, shift bool) bool {
 	i := pidIndex(pid)
 	acts, mt := w.Actors(), w.monsterTables()
 	if i >= len(acts) || mt == nil {
-		return
+		return false
 	}
 	a := &acts[i]
 	if a.AIState == monsters.Dead {
 		if depth < clickDepth {
-			w.S.note("corpse", "Evt_Click: searching a corpse (M8c)")
+			w.searchCorpse(i)
+			return false
 		}
-		return
+		return true
 	}
 	if shift {
 		w.S.note("cast", "Evt_Click with Shift: the quick spell at an actor (M9)")
-		return
+		return false
 	}
 	if monsters.Relation(mt, a, nil) != 0 || a.Flags&monsters.FlagHostile != 0 {
 		w.S.note("attack", "Evt_Click on a hostile actor: msg 0x17, attack (M9)")
-		return
+		return false
 	}
-	if depth < clickDepth {
-		w.talkToActor(a)
+	if depth >= clickDepth {
+		return true
 	}
+	w.talkToActor(i)
+	return false
 }
 
 // interactActor is Evt_InteractObject's actor case (Space); it stops the scan except at a
@@ -681,11 +680,11 @@ func (w *World) interactActor(i int) bool {
 	case monsters.Dying, monsters.Summoned:
 		return false
 	case monsters.Dead:
-		w.S.note("corpse", "Evt_InteractObject: searching a corpse (M8c)")
+		w.searchCorpse(i)
 		return true
 	}
 	if monsters.Relation(mt, a, nil) == 0 && a.Flags&monsters.FlagHostile == 0 {
-		w.talkToActor(a)
+		w.talkToActor(i)
 	}
 	return true
 }
@@ -700,14 +699,18 @@ func (w *World) interactItem(i int) bool {
 	return w.pickUp(i, true)
 }
 
-// talkToActor: an actor able to act turns to the party (M8b) and talks when it is an
-// NPC (msg 0xa1: Evt_SpeakNPC with the member's greeting); otherwise its group's news
-// shows in the message box and the selected member greets.
+// talkToActor: actor i, when able to act, turns to the party (Actor_FaceObject) and
+// talks when it is an NPC (msg 0xa1: Evt_SpeakNPC with the member's greeting);
+// otherwise its group's news shows in the message box and the selected member greets.
 //
 // mm8: 0x421a65, 0x469d53, 0x42f97e (msg 0xa1: Evt_SpeakNPC(actor, 1))
-func (w *World) talkToActor(a *monsters.Actor) {
+func (w *World) talkToActor(i int) {
+	a := &w.Actors()[i]
 	if !a.CanAct() {
 		return
+	}
+	if b := w.brain(); b != nil {
+		b.FaceObject(i, monsters.KindParty, nil)
 	}
 	m := w.S.Party
 	greet := func() {
@@ -735,7 +738,7 @@ func (w *World) talkToActor(a *monsters.Actor) {
 	}
 }
 
-// debugKeys: F6 kills the nearest actor (Actor_Die; its loot is M8c's), F7 freezes the AI.
+// debugKeys: F6 kills the nearest actor (Actor_Die), F7 freezes the AI.
 func (w *World) debugKeys(in *ui.Input) {
 	if in.Pressed(ui.KeyF7) {
 		w.AIFrozen = !w.AIFrozen

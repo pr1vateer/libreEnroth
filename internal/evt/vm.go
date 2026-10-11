@@ -1,6 +1,7 @@
 package evt
 
 import (
+	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 )
@@ -92,6 +93,38 @@ type Host interface {
 	// Stub is an opcode of a later milestone (op.Milestone()), or a player variable the
 	// stats do not have yet (var >= 0).
 	Stub(op Op, r Record, v Var)
+	ActorHost
+}
+
+// ActorHost is what the actor opcodes do to the map's monsters and ground objects.
+type ActorHost interface {
+	// SummonMonsters spawns monsters near a point (SummonMonsters, 0x13).
+	SummonMonsters(s Summon)
+	// SetActorFlag and SetGroupFlag set or clear actor flag bits (0x18, 0x39).
+	SetActorFlag(actor int, bits uint32, on bool)
+	SetGroupFlag(group int32, bits uint32, on bool)
+	// SetActorGroup, ChangeGroup and ChangeGroupAlly change actors' groups and allies
+	// (0x30, 0x36, 0x37).
+	SetActorGroup(actor int, group int32)
+	ChangeGroup(from, to int32)
+	ChangeGroupAlly(group, ally int32)
+	// SetActorItem and NPCSetItem give an actor an item or take it (0x3c, 0x31).
+	SetActorItem(actor int, item int32, on bool)
+	NPCSetItem(npc, item int32, on bool)
+	// ActorsKilled is the kill check of IsActorKilled (0x33, 0x34): mode and param pick
+	// the actors, n 0 asks for all of them gone, else at least n.
+	ActorsKilled(mode int, param int32, n int, disabledToo bool) bool
+	// DropItem throws count objects carrying it from a point (SummonItem, 0x22).
+	DropItem(it items.Item, x, y, z, speed int32, count int, randomYaw bool)
+}
+
+// Summon is a SummonMonsters record: Type monsters (the MapStats slot 1..3) of Level
+// (0..3: the base kind or A/B/C), Count of them (0: the slot's own number) at a point,
+// in Group, with placemon.txt name UniqueName.
+type Summon struct {
+	Type, Level, Count int
+	X, Y, Z            int32
+	Group, UniqueName  int32
 }
 
 // Suspension is an event waiting for the player.
@@ -243,7 +276,7 @@ func (r *run) suspend(op Op, id, step int, question string) {
 // CanShowTopic decides whether a dialogue shows the topic of global event id, from its
 // visibility records: OnCanShowDialogItemCmp (0x2c) jumps when a member passes the
 // compare, SetCanShowDialogItem (0x2e) sets the answer, CanShowTopicIsActorKilled
-// (0x34) jumps when the actors are dead (M8: never), Exit or EndCanShowDialogItem end
+// (0x34) jumps when the actors are dead, Exit or EndCanShowDialogItem end
 // it. 0: hidden, 1: shown, 2: the event has none of these records (shown).
 //
 // mm8: 0x4444fe (Evt_CanShowTopic; it starts at the running event's start step)
@@ -280,7 +313,9 @@ scan:
 			result = rec.U8(5)
 			seen = true
 		case OpCanShowTopicKill:
-			h.Stub(OpIsActorKilled, rec, -1) // actors are M8's: nobody counts as killed
+			if killed(h, rec) {
+				i, cur = -1, rec.U8(0xc)-1
+			}
 		}
 		cur++
 	}
@@ -531,6 +566,36 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 		if r.checkSkill(rec) {
 			next = rec.U8(0xb)
 		}
+	case OpSummonMonsters:
+		// mm8: 0x4446bd (case 0x13), 0x447193 (Evt_SummonMonsters)
+		h.SummonMonsters(Summon{Type: rec.U8(5), Level: rec.U8(6), Count: rec.U8(7),
+			X: rec.I32(8), Y: rec.I32(0xc), Z: rec.I32(0x10), Group: rec.I32(0x14), UniqueName: rec.I32(0x18)})
+	case OpToggleActorFlag:
+		// mm8: 0x4446bd (case 0x18)
+		h.SetActorFlag(int(rec.I32(5)), rec.U32(9), rec.U8(0xd) != 0)
+	case OpToggleGroupFlag:
+		// mm8: 0x4446bd (case 0x39)
+		h.SetGroupFlag(rec.I32(5), rec.U32(9), rec.U8(0xd) != 0)
+	case OpSetActorGroup:
+		// mm8: 0x4446bd (case 0x30)
+		h.SetActorGroup(int(rec.I32(5)), rec.I32(9))
+	case OpChangeGroup:
+		// mm8: 0x4446bd (case 0x36)
+		h.ChangeGroup(rec.I32(5), rec.I32(9))
+	case OpChangeGroupAlly:
+		// mm8: 0x4446bd (case 0x37)
+		h.ChangeGroupAlly(rec.I32(5), rec.I32(9))
+	case OpSetActorItem:
+		// mm8: 0x4446bd (case 0x3c)
+		h.SetActorItem(int(rec.I32(5)), rec.I32(9), rec.U8(0xd) != 0)
+	case OpNPCSetItem:
+		// mm8: 0x4446bd (case 0x31)
+		h.NPCSetItem(rec.I32(5), rec.I32(9), rec.U8(0xd) != 0)
+	case OpIsActorKilled:
+		// mm8: 0x4446bd (case 0x33)
+		if killed(h, rec) {
+			next = rec.U8(0xc)
+		}
 	case OpGiveItem:
 		r.giveItem(rec)
 	case OpSummonItem:
@@ -559,6 +624,14 @@ func (r *run) exec(rec Record) (next int, exit bool) {
 		// Triggers (OnTimer, OnMapReload, ...) and opcodes without a case: nothing.
 	}
 	return next, false
+}
+
+// killed is the kill check of an IsActorKilled or CanShowTopicIsActorKilled record:
+// +5 mode, +6 param, +0xa count, +0xb whether disabled actors count as gone.
+//
+// mm8: 0x444473 (Evt_IsActorKilled)
+func killed(h Host, rec Record) bool {
+	return h.ActorsKilled(rec.U8(5), rec.I32(6), rec.U8(0xa), rec.U8(0xb) != 0)
 }
 
 // strEqualASCII is _stricmp == 0.

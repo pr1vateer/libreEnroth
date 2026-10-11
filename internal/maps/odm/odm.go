@@ -123,8 +123,8 @@ type Decoration struct {
 // Decoration flags (FUN_0047b61b, the minimap FUN_0043f7f4).
 const (
 	DecTriggerParty  = 0x1 // proximity: the event runs while the party is within Radius
-	DecTriggerActor  = 0x2 // ... an actor (M8)
-	DecTriggerObject = 0x4 // ... an object (M9)
+	DecTriggerActor  = 0x2 // ... an actor
+	DecTriggerObject = 0x4 // ... an object
 	DecVisibleOnMap  = 0x8 // also set when Space ran its event
 	DecInvisible     = 0x20
 )

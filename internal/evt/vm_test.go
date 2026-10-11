@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"libre-enroth/internal/game/clock"
+	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/npc"
 	"libre-enroth/internal/game/party"
 )
@@ -31,7 +32,43 @@ type fakeHost struct {
 	reply  []string
 	notes  []string
 	chests []int
-	trap   bool // OpenChest reports a trap that went off
+	trap   bool     // OpenChest reports a trap that went off
+	actors []string // the actor opcodes' calls
+	killed bool     // ActorsKilled's answer
+	drops  []items.Item
+}
+
+func (h *fakeHost) SummonMonsters(s Summon) {
+	h.actors = append(h.actors, fmt.Sprintf("summon %+v", s))
+}
+func (h *fakeHost) SetActorFlag(a int, bits uint32, on bool) {
+	h.actors = append(h.actors, fmt.Sprintf("flag %d %#x %v", a, bits, on))
+}
+func (h *fakeHost) SetGroupFlag(g int32, bits uint32, on bool) {
+	h.actors = append(h.actors, fmt.Sprintf("groupflag %d %#x %v", g, bits, on))
+}
+func (h *fakeHost) SetActorGroup(a int, g int32) {
+	h.actors = append(h.actors, fmt.Sprintf("group %d %d", a, g))
+}
+func (h *fakeHost) ChangeGroup(from, to int32) {
+	h.actors = append(h.actors, fmt.Sprintf("changegroup %d %d", from, to))
+}
+func (h *fakeHost) ChangeGroupAlly(g, ally int32) {
+	h.actors = append(h.actors, fmt.Sprintf("ally %d %d", g, ally))
+}
+func (h *fakeHost) SetActorItem(a int, item int32, on bool) {
+	h.actors = append(h.actors, fmt.Sprintf("item %d %d %v", a, item, on))
+}
+func (h *fakeHost) NPCSetItem(npc, item int32, on bool) {
+	h.actors = append(h.actors, fmt.Sprintf("npcitem %d %d %v", npc, item, on))
+}
+func (h *fakeHost) ActorsKilled(mode int, param int32, n int, disabledToo bool) bool {
+	h.actors = append(h.actors, fmt.Sprintf("killed %d %d %d %v", mode, param, n, disabledToo))
+	return h.killed
+}
+func (h *fakeHost) DropItem(it items.Item, x, y, z, speed int32, count int, randomYaw bool) {
+	h.drops = append(h.drops, it)
+	h.actors = append(h.actors, fmt.Sprintf("drop %d at %d,%d,%d speed %d x%d %v", it.Number, x, y, z, speed, count, randomYaw))
 }
 
 func newHost(members int) *fakeHost {

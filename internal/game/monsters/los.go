@@ -21,10 +21,11 @@ func (b *Brain) seePos(pid uint32, second bool) (x, y, z int32, sector int, ok b
 	n := int(pid >> 3)
 	switch pid & 7 {
 	case KindObject:
-		if n >= len(b.Objects) {
+		objs := b.objects()
+		if n >= len(objs) {
 			return
 		}
-		o := &b.Objects[n]
+		o := &objs[n]
 		return o.Pos[0], o.Pos[1], o.Pos[2], int(o.Sector), true
 	case KindActor:
 		if n >= len(b.Actors) {

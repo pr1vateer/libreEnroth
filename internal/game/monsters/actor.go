@@ -66,6 +66,14 @@ const (
 	BuffEnslaved       = 11
 )
 
+// Actor item slots (Actor.Items).
+const (
+	ItemEvent0 = 0 // two items events give (Evt_SetActorItem 0x44690e)
+	ItemEvent1 = 1
+	ItemLoot   = 2 // the corpse's item (Actor_GenerateLoot)
+	ItemGold   = 3 // the corpse's gold (item 0xbb, the amount in Special)
+)
+
 // Actor_Init's defaults.
 const (
 	defaultTether = 0x100

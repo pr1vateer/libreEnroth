@@ -121,8 +121,9 @@ type Brain struct {
 	Party   Party
 	Host    Host
 
-	Actors  []Actor
-	Objects []Object
+	Actors []Actor
+	// Objects is the map's object list (the delta's), which drops and throws grow.
+	Objects *[]Object
 
 	// Near and Close are g_partyFlags 0x20 and 0x10: an actor hostile to the party is
 	// within 0x1400 (the rest screen's "monsters nearby") or within melee reach.
@@ -131,6 +132,14 @@ type Brain struct {
 	targets [MaxActors]uint32 // 0x508198: each actor's target pid
 	list    []int             // 0x50913c: the AI list, nearest first
 	attacks attackList        // 0x5214c8
+}
+
+// objects is the map's object list (nil without one).
+func (b *Brain) objects() []Object {
+	if b.Objects == nil {
+		return nil
+	}
+	return *b.Objects
 }
 
 // Target is actor i's target pid as of the last tick.
@@ -861,8 +870,8 @@ func (b *Brain) fromPos(pid uint32) (x, y, z int32) {
 	p := &b.Party
 	switch pid & 7 {
 	case KindObject:
-		if n < len(b.Objects) {
-			o := &b.Objects[n]
+		if objs := b.objects(); n < len(objs) {
+			o := &objs[n]
 			return o.Pos[0], o.Pos[1], o.Pos[2]
 		}
 	case KindActor:
@@ -1289,25 +1298,6 @@ func (b *Brain) Stun(i int, attacker uint32, force bool) {
 	a.AIState = Stunned
 	b.sound(i, 2)
 	a.UpdateAnimation(b.Sprites)
-}
-
-// Die starts an actor's death: the dying animation, no HP, no buffs. The kill flags,
-// the reagents and the loot are M8c's.
-//
-// mm8: 0x402ec9 (Actor_Die, its first part)
-func (b *Brain) Die(i int) {
-	a := &b.Actors[i]
-	a.ActionTime, a.AIState, a.Animation = 0, Dying, tables.AnimDying
-	a.HP = 0
-	a.ActionLength = b.frameTicks(a.Sprites[tables.AnimDying])
-	a.Buffs[BuffParalysed].Clear()
-	a.Buffs[BuffStoned].Clear()
-	b.sound(i, 1)
-	a.UpdateAnimation(b.Sprites)
-	for k := range buffsExpired {
-		a.Buffs[k].Clear()
-	}
-	b.stub("die", "Actor_Die 0x402ec9: kill flags, reagents and loot (M8c)")
 }
 
 // attackAim is where an attack state aims at its target: an actor at 3/4 of its

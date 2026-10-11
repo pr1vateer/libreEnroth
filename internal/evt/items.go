@@ -58,10 +58,10 @@ func (r *run) giveItem(rec Record) {
 }
 
 // summonItem is SummonItem (0x22): +5 id, above 1000 a random enchantment of level
-// id/1000 for item id%1000 (a bonus forced); identified. The original drops it at
-// +9 xyz as an object (M8); here it goes on the mouse.
+// id/1000 for item id%1000 (a bonus forced); identified; count objects (+0x19) of it
+// thrown from +9 xyz at speed +0x15, straight up or (+0x1a) in random directions.
 //
-// mm8: 0x4446bd (case 0x22), 0x42ecee (the object)
+// mm8: 0x4446bd (case 0x22), 0x42ecee (Object_DropItem)
 func (r *run) summonItem(rec Record) {
 	c := r.h.Ctx()
 	if c.Items == nil {
@@ -76,8 +76,7 @@ func (r *run) summonItem(rec Record) {
 	}
 	it.Flags |= items.FlagIdentified
 	it.Number = id
-	r.h.Stub(OpSummonItem, rec, -1) // notes once that the object is M8's
-	r.m.SetMouseItem(c.Items, it)
+	r.h.DropItem(it, rec.I32(9), rec.I32(0xd), rec.I32(0x11), rec.I32(0x15), rec.U8(0x19), rec.U8(0x1a) != 0)
 }
 
 // CheckItemsCount reports at least n items with ids min..max on the mouse, in the

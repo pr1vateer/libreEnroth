@@ -27,7 +27,7 @@ const (
 	FlagNoFallDmg   = 0x100 // the next landing does not hurt
 	FlagBurning     = 0x200 // standing in lava
 	FlagMoved       = 0x400 // ran or turned fast this frame (outdoors)
-	FlagBoundObject = 0x800 // carried by an object (M8)
+	FlagBoundObject = 0x800 // carried by an object (M9)
 )
 
 // The move code's constants.

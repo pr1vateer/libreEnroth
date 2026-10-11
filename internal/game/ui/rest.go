@@ -18,6 +18,8 @@ type RestSite interface {
 	RestFood() int
 	// RestEncounter rolls for monsters interrupting a night's rest.
 	RestEncounter() bool
+	// ResetActors puts the map's monsters back after a long night at an inn.
+	ResetActors()
 	// RestDone runs when a night's rest ends.
 	RestDone()
 }
@@ -35,6 +37,8 @@ const (
 	txtAmbushed  = 0x1e1 // "Encounter!"
 	restMinutes  = 480   // a night's rest
 	restStepMins = 6     // per frame
+	// innResetMinutes is how long an inn's night must be to reset the map's monsters.
+	innResetMinutes = 0xf0
 )
 
 // Rest modes (0x5184c0).
@@ -200,8 +204,8 @@ func (s *restScreen) restHeal(ticks int) {
 }
 
 // restAtInn starts the inn's night: everyone heals and sleeps until an hour past the
-// next 5 AM; no food is eaten and no monsters come. (A night longer than 4 hours also
-// resets the map's monsters, 0x40928c: M8.)
+// next 5 AM; no food is eaten and no monsters come. A night longer than 4 hours resets
+// the map's monsters first.
 //
 // mm8: 0x42f877 (msg 0x199)
 func (s *restScreen) restAtInn(ticks int) {
@@ -209,6 +213,9 @@ func (s *restScreen) restAtInn(ticks int) {
 	c := m.Calendar
 	s.mode = restResting
 	s.minutes = (clock.HoursTo5AM(c.Hour)+1)*60 - c.Minute
+	if s.minutes > innResetMinutes {
+		s.site.ResetActors()
+	}
 	m.RestHeal(ticks, s.ctx)
 	for i := range m.Players {
 		m.Players[i].Conditions[party.CondAsleep] = int64(m.Time)

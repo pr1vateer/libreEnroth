@@ -248,6 +248,9 @@ type Members struct {
 	Deaths    int32          // +0x74c
 	Prison    int32          // +0x754: prison terms
 	Bounty    int32          // +0x758: total bounty collected
+	// Hunts are the bounty hunts: slot 0 is the bounty topic's (0x4bc140), slots 0..4
+	// the town halls' (houses 102..106; MM8 has none).
+	Hunts [NumHunts]Hunt
 	// Fine is the town halls' fine (0xbb2df4, outside the Party struct); nothing in MM8
 	// sets it, the town halls only show and take it.
 	Fine int32
@@ -272,6 +275,9 @@ type Members struct {
 	ArtifactsFound [items.NumArtifacts]bool
 	// MouseItem is the item held on the cursor (g_mouseItem 0xb7c964; Number 0: none).
 	MouseItem items.Item
+	// Throw drops an item that no pack has room for in front of the party, as a ground
+	// object (the world sets it; nil: the item is lost).
+	Throw func(it items.Item)
 	// Shuffle is a random order of 0..31 that party creation makes (+0x86e, past the
 	// autonote bits; nothing found so far reads it back).
 	Shuffle [32]uint8

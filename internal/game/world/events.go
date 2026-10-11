@@ -302,22 +302,39 @@ func (w *World) runDecoration(i int) bool {
 	return true
 }
 
-// proximity runs the events of decorations that trigger on the party: every tick it is
-// within their radius (max + mid*11/32 + min/4 of the axis distances). Actor and
-// object triggers are M8/M9's.
+// proximity runs the events of decorations something is near: within its trigger
+// radius (the approximate distance) of the party, of any actor or of any object slot
+// (the original's lists include the dead and the freed ones), as each is flagged.
 //
-// mm8: 0x46ce50 (Evt_Proximity, from World_Tick)
+// mm8: 0x46ce50 (Evt_Proximity)
 func (w *World) proximity() {
 	p := w.group
+	near := func(d decView, x, y, z int32) bool {
+		a := [3]int32{abs32(d.pos[0] - x), abs32(d.pos[1] - y), abs32(d.pos[2] - z)}
+		sort.Slice(a[:], func(i, j int) bool { return a[i] > a[j] })
+		return a[0]+a[2]>>2+a[1]*11>>5 < int32(d.radius)
+	}
 	for i := range w.numDecorations() {
 		d := w.decoration(i)
-		if *d.flags&odm.DecTriggerParty == 0 || d.event == 0 {
+		if d.event == 0 {
 			continue
 		}
-		a := [3]int32{abs32(d.pos[0] - p.X), abs32(d.pos[1] - p.Y), abs32(d.pos[2] - p.Z)}
-		sort.Slice(a[:], func(i, j int) bool { return a[i] > a[j] })
-		if a[0]+a[2]>>2+a[1]*11>>5 < int32(d.radius) {
+		if *d.flags&odm.DecTriggerParty != 0 && near(d, p.X, p.Y, p.Z) {
 			w.RunEvent(int(d.event), true)
+		}
+		if *d.flags&odm.DecTriggerActor != 0 {
+			for _, a := range w.Actors() {
+				if near(d, int32(a.Pos[0]), int32(a.Pos[1]), int32(a.Pos[2])) {
+					w.RunEvent(int(d.event), true)
+				}
+			}
+		}
+		if *d.flags&odm.DecTriggerObject != 0 {
+			for _, o := range w.Objects() {
+				if near(d, o.Pos[0], o.Pos[1], o.Pos[2]) {
+					w.RunEvent(int(d.event), true)
+				}
+			}
 		}
 	}
 }
@@ -369,7 +386,8 @@ func (w *World) decRadius(i int) float64 {
 // Click handles a left click in the view at UI point (x, y): a decoration less than
 // 512 units (beyond its radius) away runs its event, a clickable face less than 512
 // away its event; another face says "Nothing here". An item on the ground is picked up,
-// a friendly actor talks.
+// a friendly actor talks, a corpse is searched. A click nothing takes throws the item
+// on the mouse that way.
 //
 // mm8: 0x421a65 (Evt_Click)
 func (w *World) Click(x, y int) {
@@ -378,10 +396,11 @@ func (w *World) Click(x, y int) {
 	case pidDecoration:
 		if i := pidIndex(pid); i < w.numDecorations() && depth-w.decRadius(i) < clickDepth {
 			w.runDecoration(i)
+			return
 		}
 	case pidFace:
 		if depth >= clickDepth {
-			return
+			break
 		}
 		event, attr, ok := w.faceEvent(pid)
 		if !ok {
@@ -391,12 +410,20 @@ func (w *World) Click(x, y int) {
 			w.RunEvent(event, true)
 			return
 		}
-		w.NothingHere()
+		if w.S.Party.MouseItem.Number == 0 {
+			w.NothingHere()
+			return
+		}
 	case pidActor:
-		w.clickActor(pid, depth, w.shift)
+		if !w.clickActor(pid, depth, w.shift) {
+			return
+		}
 	case pidObject:
-		w.clickObject(pid, depth)
+		if w.clickObject(pid, depth) {
+			return
+		}
 	}
+	w.throwMouseItem(x)
 }
 
 // Interact is the interact key (Space): the faces and decorations within 512 units in

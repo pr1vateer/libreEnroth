@@ -77,6 +77,18 @@ func (w *World) SetAutonote(n int) {
 	}
 }
 
+// AddGold implements dialog.Host.
+//
+// mm8: 0x420921 (Party_AddGold, mode 0)
+func (w *World) AddGold(n int32) { w.S.Party.AddGold(n, worldNotes{w}) }
+
+// SetAward implements dialog.Host (Evt_Set(member, 0xc, n)).
+func (w *World) SetAward(member, n int) {
+	if member >= 0 && member < len(w.S.Party.Players) {
+		w.vm.Set(member, evt.VarAwards, uint32(n))
+	}
+}
+
 // Note implements dialog.Host: logged once each.
 func (w *World) Note(what string) {
 	if w.S.noted == nil {

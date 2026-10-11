@@ -67,7 +67,7 @@ func TestTalkToActor(t *testing.T) {
 	if a.NPC != 31 {
 		t.Fatalf("actor 0 npc %d", a.NPC)
 	}
-	w.talkToActor(a)
+	w.talkToActor(0)
 	d := w.Dialog()
 	if d == nil || d.Kind != dialog.KindNPC || d.NPC != 31 {
 		t.Fatalf("dialogue %+v", d)
@@ -104,26 +104,32 @@ func TestPickUp(t *testing.T) {
 	}
 }
 
-// A map comes back as left within its refill days; after them the template returns with
-// new spawns.
+// A map comes back as left within its refill days (a searched corpse stays gone; the
+// living are reset as after a rest: back to full HP); after them the template returns
+// with new spawns.
 //
-// mm8: 0x47df28 (Odm_Load: day - lastVisit >= refill days)
+// mm8: 0x47df28 (Odm_Load: day - lastVisit >= refill days), 0x40928c (Outdoor_OnLoad:
+// Actors_ResetAfterRest)
 func TestRespawn(t *testing.T) {
 	e := newEnv(t)
 	s := quietSession()
 	w := e.load(t, "out01.odm", s)
 	n := len(w.Actors())
-	w.Actors()[0].HP = 1
+	w.Actors()[0].AIState = monsters.Removed
+	w.Actors()[1].HP = 1
 	e.load(t, "d05.blv", s)
 	w = e.load(t, "out01.odm", s)
-	if len(w.Actors()) != n || w.Actors()[0].HP != 1 {
-		t.Fatalf("out01 changed on a second visit: %d actors, hp %d", len(w.Actors()), w.Actors()[0].HP)
+	if len(w.Actors()) != n || w.Actors()[0].AIState != monsters.Removed {
+		t.Fatalf("out01 changed on a second visit: %d actors, state %d", len(w.Actors()), w.Actors()[0].AIState)
+	}
+	if a := &w.Actors()[1]; int32(a.HP) != a.Info.HP {
+		t.Errorf("actor 1 not reset: hp %d of %d", a.HP, a.Info.HP)
 	}
 	refill := w.mapStats().RefillDays
 	s.Party.Time += clock.Time(refill) * clock.Day
 	w = e.load(t, "out01.odm", s)
-	if w.Actors()[0].HP == 1 || len(w.Actors()) < 62 {
-		t.Errorf("out01 after %d days: %d actors, hp %d", refill, len(w.Actors()), w.Actors()[0].HP)
+	if w.Actors()[0].AIState == monsters.Removed || len(w.Actors()) < 62 {
+		t.Errorf("out01 after %d days: %d actors, state %d", refill, len(w.Actors()), w.Actors()[0].AIState)
 	}
 }
 

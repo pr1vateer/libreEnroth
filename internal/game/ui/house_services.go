@@ -147,7 +147,8 @@ func (s *dialogScreen) guildPanel() servicePanel {
 }
 
 // townHallPanel is the town hall: the current fine under the menu (Bounty Hunt, and
-// Pay Fine while there is one), or the gold entry for paying it.
+// Pay Fine while there is one), the bounty in the reply box, or the gold entry for
+// paying the fine.
 //
 // mm8: 0x4b8364
 func (s *dialogScreen) townHallPanel() servicePanel {
@@ -166,6 +167,13 @@ func (s *dialogScreen) townHallPanel() servicePanel {
 		return servicePanel{draw: func(c *gfx.Canvas, _ int) {
 			drawFine(c)
 			s.drawGoldInput(c, g(0x25e))
+		}}
+	case dialog.SvcBounty:
+		return servicePanel{draw: func(c *gfx.Canvas, _ int) {
+			drawFine(c)
+			if d.Reply != "" {
+				s.art.drawReply(c, d.Reply, 0x1ca, 0xd, func(th int) bool { return Viewport.Max.Y-1-th < 8 })
+			}
 		}}
 	}
 	return servicePanel{draw: func(c *gfx.Canvas, _ int) { drawFine(c) }}

@@ -80,6 +80,7 @@ import (
 	"libre-enroth/internal/game/dialog"
 	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/party"
+	"libre-enroth/internal/game/physics"
 	"os"
 	"path/filepath"
 	"testing"
@@ -210,21 +211,21 @@ type view struct {
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "25731855575c6104c7c5fa79dda2176a2a82e81f4102537a7f645b9c7d9e5ada",
-	"out01_town":  "ec03119b655761cd40dfab48db759d6df8d591c57246894832a9ce1041634856",
+	"out01_spawn": "71560af86f0a8066d6a669f32268ac19868be21ac1bd45f44457e96803249cf0",
+	"out01_town":  "12133e575c9462cae497c419fdf032e7631d7093eae019f114940a4057f3b076",
 	"out01_sky":   "a5caaa4d4265bad848b159407492b0d09f981bf0743cf0cd95017b6007b52b68",
 	"out02_wide":  "cddbc4073a608b1aa5d0a6164a4453772e9e37d10e17a91b6126bd346827a001",
 	"d05_start":   "39151aeebcf3da875b8cc19cedcfb6b1bb2cb9a87112b19a108c20dc9749af38",
 	"d05_door":    "c3de256d2c17f28211c18b58b21b3529064da596003150fb95c3d77a79e6799e",
 	"d13_torch":   "bdede009ba188dc6ddc6ca43dde95a5bbb8a3271d0626b00d35d45edaa3e8110",
-	"d16_start":   "23af5fec8878f212756504dd677340e1645f5f4344bfb3f219e446df408f7f49",
-	"d28_stairs":  "d0c04b7a2c01bcf7e1664cbe1d252d4e6eadd5ce627fe4382a9a3396faeaa79a",
+	"d16_start":   "efc9c80d4785d80a7fe40205575a40e0622b53550d345e8c3f43211935373de2",
+	"d28_stairs":  "1745b0319d1ce32ae80ce30efd9067af0dd4a648b9d02d85759f947d6df0df77",
 	"d28_climb":   "e61b434fab1b2a818a6df159cea06345c7bc33cf8d2ea653cee177409322bc88",
 	"out01_run":   "1e621b8cee4a217e61d71d23071032cfef0d0ac58227afe3dddfe7d6d42cc7bf",
 	"d05_walk":    "0d411990e53e2b8089ff5dc45d8ad1dcb2dd3f645d6bf7abf9891fe7d1f45b3d",
 	"d05_click":   "a56ed09721ec0ea3c7058f825d1d08f4a5b4e1ae9d16ae40d1881d520d9153cd",
 	// M6
-	"npc_dialog":     "4eb299cc91b7a86ec4f2596049133f2037c2f5cbd0e92ac9d7ae9b2dfb27de00",
+	"npc_dialog":     "2887d7d53a3f86848c059371d72d5e8ecc76091e65c1297e6944880e965ac94a",
 	"house_resident": "8a1d602c3ff48599bf4fed6ea9dbeb657dbc2f0c118ba6a191932d93a956b876",
 	"evt_message":    "95f2d6cd86d60db5d249adbba67277ef2424cd7b1109ef63c9937bd6cf932332",
 	// M6c
@@ -251,12 +252,16 @@ var worldHashes = map[string]string{
 	"teacher_topic":  "655fde40df79d5477b125598ba44b8d0215263d25a93b85d48ceab107d4eeb67",
 	"inn_roster":     "372b92c2515917b29a72149c83cbfebe1e3d19c3bbe62e9893837bf9ee12f308",
 	// M8a
-	"out01_actors": "f2ca33a0b66a0434ad85cffe6fec16535e27decbc74f052c338a2898679120c1",
+	"out01_actors": "a5430f53e45d96a8dcfd22f00178d75fa5856aba85b0667d9ab1b7c3aaf29448",
 	"d05_spawned":  "83fad542b7c2cbbf5a3c07fe5ba552ce3759208e91e70cdc1e562f74371e5bcf",
-	"hover_actor":  "96bfde9f7c8dcfe0df57643fb729d83fa06d7612e1474dec349414d5058e9901",
+	"hover_actor":  "ccb0f972dbf4d7a1728e5bb109bbd3eca03b24e060644f0d03449c1ee24bbdde",
 	// M8b
-	"out01_pursuit": "2e54f7fd9ba5cff3f091d511a63e8e4ef91722469409ac811bc86548fe4842fc",
-	"d05_melee":     "813750eba21222aff0dd33aed92414bb78e6d5bbb356f623e6069747b1ccd975",
+	"out01_pursuit":  "78a99c952579021335145a5b60da0ad8da3556bae92a328bf47527dcfe12e45b",
+	"d05_melee":      "813750eba21222aff0dd33aed92414bb78e6d5bbb356f623e6069747b1ccd975",
+	"ground_items":   "98dce6e6ac7d62560adef6e47c1f1e9c20911bdbf9692e4eed1db6f934bc2817",
+	"actor_dead":     "20d1c3ee131c5dc0c383bf3fa11420185b1577da08b5fb625c5e42b2c459692d",
+	"bounty_topic":   "ba2ce708284ae1d5c20a2e15d3205b808d8cc402caa0a8b2a3d8b21ac0d914bf",
+	"rest_encounter": "e688e03d66f7f5f489e510b3dd8811c556b77ae088a3439d88f0345b4ef4995d",
 }
 
 var views = []view{
@@ -402,6 +407,47 @@ var views = []view{
 	// M8b: d05's lizardmen at the party's throat, its HP bar down.
 	{name: "d05_melee", mapName: "d05.blv", party: &FreeCam{X: -2950, Y: -1150, Z: 945, Yaw: 1650},
 		click: "Mouse@600/50:150", w: 640, h: 480},
+	// M8c: d13's items on the floor of sector 37 among its gogs, the mouse on the gold.
+	{name: "ground_items", mapName: "d13.blv", party: &FreeCam{X: 0, Y: 5300, Z: -1540, Yaw: 512},
+		click: "Mouse@552/326:2", w: 640, h: 480, frozen: true},
+	// M8c: the guard before the party dies (Actor_Die, as F6 does); two seconds later
+	// it lies dead.
+	{name: "actor_dead", mapName: "out01.odm", party: &FreeCam{X: 5880, Y: 6950, Z: 740, Yaw: 512},
+		setup: func(w *World) { w.brain().Die(nearestActor(w, 5880, 7500)) },
+		click: "Mouse@600/50:150", w: 640, h: 480, hour: 9},
+	// M8c: Bryant Conlan's bounty topic in house 272: this month's monster and reward.
+	{name: "bounty_topic", mapName: "out01.odm", setup: func(w *World) {
+		w.SpeakInHouse(272)
+		d := w.Dialog()
+		d.SelectResident(0)
+		d.Click(dialog.Button{Msg: dialog.MsgHouseTopic, Param: dialog.ParamTopic0})
+	}, click: "Mouse@556/440:2", w: 640, h: 480, hour: 9},
+	// M8c: a rest encounter's monsters (out01's first type) arrive near the party,
+	// which turns to them; four seconds later they close in.
+	{name: "rest_encounter", mapName: "out01.odm", setup: func(w *World) {
+		p := w.group
+		p.Teleport(2000, 3000, int32(w.outdoor.Map.GroundZ(2000, 3000)), 0)
+		n := len(w.Actors())
+		w.spawnEncounter(w.mapStats(), 1)
+		a := &w.Actors()[n]
+		p.Dir = physics.Atan2(int32(a.Pos[0])-p.X, int32(a.Pos[1])-p.Y)
+		w.FreeCamOn = false
+	}, click: "Mouse@600/50:240", w: 640, h: 480, hour: 9},
+}
+
+// nearestActor is the living actor nearest to (x, y).
+func nearestActor(w *World, x, y int32) int {
+	best, bestD := -1, int64(1)<<62
+	for i, a := range w.Actors() {
+		if !a.CanAct() {
+			continue
+		}
+		dx, dy := int64(a.Pos[0])-int64(x), int64(a.Pos[1])-int64(y)
+		if d := dx*dx + dy*dy; d < bestD {
+			best, bestD = i, d
+		}
+	}
+	return best
 }
 
 func TestGolden(t *testing.T) {

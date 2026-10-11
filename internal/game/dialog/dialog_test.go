@@ -27,7 +27,11 @@ type fakeHost struct {
 	moves  []string
 	spoke  []int
 	glob   map[int]string // global.txt overrides
+	awards [][2]int       // member, award
 }
+
+func (h *fakeHost) AddGold(n int32)        { h.m.Gold += n }
+func (h *fakeHost) SetAward(member, n int) { h.awards = append(h.awards, [2]int{member, n}) }
 
 func (h *fakeHost) Tables() *tables.All     { return h.t }
 func (h *fakeHost) NPCs() *npc.State        { return h.npcs }

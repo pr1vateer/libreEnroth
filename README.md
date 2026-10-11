@@ -5,15 +5,16 @@ A reimplementation of the *Might and Magic VIII: Day of the Destroyer* engine in
 from your own copy of the game (for example the GOG release). No game data is included in this
 repository.
 
-Status: milestone M7. You get the title screen, credits, character creation and the in-game
+Status: milestone M8. You get the title screen, credits, character creation and the in-game
 screen. The party walks, jumps and flies through every outdoor (`.odm`) and indoor (`.blv`) map,
 drawn by a software renderer that reproduces the original's Direct3D look. Time passes, the
 party rests, and the map scripts run: doors, clicks, NPC dialogues and houses with their clips.
 Taverns, temples, banks, stables and boats work, as do dungeon entrances and walking off the
 edge of a map to the next one. Stats, the character screen and inventory, chests, potions,
 shops and guild shelves, learning skills, teachers, training and the Adventurer's Inn (hiring
-and dismissing characters) work too. Monsters, combat,
-spells, saving and sound are later milestones. "New Game" → OK starts on `out01.odm`.
+and dismissing characters) work too. Monsters live on the maps: they wander, hunt the party,
+strike in melee, die and leave corpses to search, and the bounty hunt pays for them. Combat
+(the party's attacks), spells, saving and sound are later milestones. "New Game" → OK starts on `out01.odm`.
 See `PLAN.md` in the parent repository for the roadmap.
 
 ## Requirements
@@ -94,11 +95,12 @@ go run ./cmd/libre-enroth -res auto -window 1280x800     # resize the window fre
   - **F2** (indoors) opens every closed door and closes every open one.
   - **F6** kills the nearest monster, **F7** freezes the monsters (debug).
   - The status line names the monster or the item under the mouse; a click on an item on
-    the ground (or **Space** before it) picks it up, and a click on a friendly monster that
-    is an NPC talks to it.
+    the ground (or **Space** before it) picks it up, a click on a friendly monster that is
+    an NPC talks to it, and a click on a corpse searches it. A click in the view with an
+    item on the mouse throws it there; an item no pack has room for falls before the party.
   - Monsters wander about their homes, hunt the party and each other, and strike in melee
     (their missiles and spells come with M9); hostile monsters near keep the party from
-    resting.
+    resting, and some come in the night. A long night at an inn sends them home.
   - **+/−** next to the minimap zoom it (outdoors).
   - **1–5** or a click on a portrait selects a party member; the selected member again
     opens the **character screen**:

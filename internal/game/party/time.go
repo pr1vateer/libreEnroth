@@ -217,7 +217,7 @@ func (m *Members) reduceRecovery(i int, ticks int) {
 // were picked the round starts over. When that finds nobody (or only the first member,
 // a quirk of the original's zero test) it takes the able member with the highest
 // speed bonus (Player +0x366, 0 until M7), the first on a tie. Turn-based combat picks
-// from the combat queue instead (M8).
+// from the combat queue instead (M9).
 //
 // mm8: 0x4937a7 (Party_NextSelectable)
 func (m *Members) NextSelectable() int {

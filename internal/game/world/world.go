@@ -15,6 +15,7 @@ import (
 	"libre-enroth/internal/assets/txt"
 	"libre-enroth/internal/evt"
 	"libre-enroth/internal/game/dialog"
+	"libre-enroth/internal/game/items"
 	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
@@ -211,6 +212,7 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 	}
 	w.group.Hooks = eventHooks{w: w}
 	w.group.Obstacles = actorObstacles{w: w}
+	s.Party.Throw = func(it items.Item) { w.throwItem(it, 0) }
 	if m := s.Party; m.Roster == nil && tables.Game != nil {
 		m.Roster = party.NewRoster(tables.Game.Roster, s.Ctx, &m.ArtifactsFound)
 	}
@@ -392,10 +394,12 @@ func (w *World) Update(in *ui.Input) {
 	if w.FreeCamOn {
 		w.Cam.Update(in)
 		w.thinkMonsters(int32(ticks))
+		w.moveObjects(int32(ticks))
 		w.moveMonsters(int32(ticks))
 	} else {
 		w.movePartyKeys(in)
 		w.thinkMonsters(int32(ticks))
+		w.moveObjects(int32(ticks))
 		w.moveParty(int32(ticks))
 		w.moveMonsters(int32(ticks))
 		w.proximity()

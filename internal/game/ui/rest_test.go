@@ -17,6 +17,7 @@ type restWorld struct {
 	food     int
 	ambushed bool
 	done     int
+	resets   int
 }
 
 func (w *restWorld) Update(*Input)                  {}
@@ -29,6 +30,7 @@ func (w *restWorld) RestRefusal() int               { return w.refusal }
 func (w *restWorld) RestFood() int                  { return w.food }
 func (w *restWorld) RestEncounter() bool            { return w.ambushed }
 func (w *restWorld) RestDone()                      { w.done++ }
+func (w *restWorld) ResetActors()                   { w.resets++ }
 
 func newRestApp(t *testing.T, w *restWorld, faces []int) (*App, *inGame) {
 	t.Helper()
@@ -175,5 +177,30 @@ func TestHoverStatus(t *testing.T) {
 	run(t, a, Input{X: 320, Y: 200})
 	if got := a.r.Status.Hover(); got != "" {
 		t.Errorf("hover over nothing %q", got)
+	}
+}
+
+// An inn's night resets the map's monsters only when it is longer than 4 hours: at 9:00
+// it runs to 6 AM, at 3:00 it is 3 hours.
+//
+// mm8: 0x42f877 (msg 0x199: g_restMinutes > 0xf0 -> Actors_ResetAfterRest)
+func TestInnRestResetsActors(t *testing.T) {
+	w := &restWorld{food: 2}
+	a, g := newRestApp(t, w, []int{0})
+	if err := g.openInnRest(); err != nil {
+		t.Fatal(err)
+	}
+	if w.resets != 1 {
+		t.Errorf("night from 9:00: %d resets", w.resets)
+	}
+	g.rest = nil
+	m := a.r.Party
+	m.Time += 18 * clock.Hour
+	m.Calendar = m.Time.Calendar()
+	if err := g.openInnRest(); err != nil {
+		t.Fatal(err)
+	}
+	if w.resets != 1 || g.rest.minutes != 180 {
+		t.Errorf("night from %d:00: %d resets, %d minutes", m.Calendar.Hour, w.resets, g.rest.minutes)
 	}
 }

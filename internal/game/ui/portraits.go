@@ -185,7 +185,7 @@ func (p *portraits) update() {
 
 // draw draws the faces, the ring around the selected member, the bars' frames, the
 // shields over the empty slots and the HP and SP bars. The ready gem (0x4ca970) and the
-// buff icon are M8's and M9's.
+// buff icon are M9's.
 //
 // mm8: 0x4ca371 (GuiPortraits_Draw)
 func (p *portraits) draw(c *gfx.Canvas) {

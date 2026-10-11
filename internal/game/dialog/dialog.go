@@ -35,6 +35,10 @@ type Host interface {
 	SetAutonote(n int)
 	// Note logs something a later milestone does.
 	Note(what string)
+	// AddGold gives the party gold ("You found %lu gold!"); SetAward gives member i an
+	// award (Evt_Set var 0xc).
+	AddGold(n int32)
+	SetAward(member, n int)
 
 	// Ctx has the party's random generator and time hooks.
 	Ctx() *party.Ctx
@@ -385,7 +389,7 @@ func (d *Dialog) topics(n *tables.NPC, msg int) []Button {
 func OpenNPC(h Host, id int) *Dialog {
 	n := h.NPCs().Get(id)
 	if n == nil {
-		h.Note(fmt.Sprintf("SpeakNPC %d: hirelings and street NPCs (M8)", id))
+		h.Note(fmt.Sprintf("SpeakNPC %d: hirelings and street NPCs (none ships with an actor)", id))
 		return nil
 	}
 	npc.Visit(n)
@@ -415,6 +419,8 @@ func topicEvent(n *tables.NPC, param int) int {
 // mm8: 0x4b2b74 (house topics), 0x4bcbf2 (an NPC's topics)
 func (d *Dialog) Click(b Button) {
 	switch b.Msg {
+	case 0:
+		return // a button that posts nothing (the bounty topic's)
 	case MsgService:
 		d.service(b.Param)
 		return
@@ -455,7 +461,7 @@ func (d *Dialog) Click(b Button) {
 }
 
 // topic runs topic event ev: teachers (300..416), the lost-item quest (0x2c1), the
-// arena (0x243, 0x2c0), roster characters offering to join (600..649), else the global
+// bounty hunt (0x243), the arena (0x2c0), roster characters offering to join (600..649), else the global
 // event with the reply cleared first.
 //
 // mm8: 0x4b2b74, 0x4bcbf2
@@ -465,8 +471,10 @@ func (d *Dialog) topic(n *tables.NPC, param, ev int) {
 		d.teacher(ev)
 	case ev == 0x2c1:
 		d.lostItem()
-	case ev == 0x243 || d.Kind == KindNPC && ev == 0x2c0:
-		d.h.Note("the arena (0x4bc140, 0x4bc37d, M12)")
+	case ev == EventBounty:
+		d.bounty()
+	case d.Kind == KindNPC && ev == EventArena:
+		d.h.Note("the arena (0x4bc37d, M12)")
 	case ev >= 600 && ev <= 0x289:
 		d.topicSlot = param
 		d.joinOffer(ev)

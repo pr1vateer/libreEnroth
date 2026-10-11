@@ -191,43 +191,14 @@ func abs32(v int32) int32 {
 	return v
 }
 
-// CreateObject puts o into the first free slot (ObjList 0) of objects, growing the list
-// when the slot is past its end; its start position is where it is. An object without a
-// dobjlist entry is not made (-1). Throwing (a speed or a member) is M8c's.
-//
-// mm8: 0x42eaea (Object_Create, speed and member 0)
-func CreateObject(objects []Object, o Object) ([]Object, int) {
-	if o.ObjList == 0 {
-		return objects, -1
-	}
-	slot := len(objects)
-	for i := range objects {
-		if objects[i].ObjList == 0 {
-			slot = i
-			break
-		}
-	}
-	if slot >= MaxObjects {
-		return objects, -1
-	}
-	o.Start = o.Pos
-	o.Vel = [3]int16{}
-	if slot == len(objects) {
-		objects = append(objects, o)
-	} else {
-		objects[slot] = o
-	}
-	return objects, slot
-}
-
 // newObject is SpriteObject_Init: no item, glow 1.
 //
 // mm8: 0x404b7a (SpriteObject_Init)
 func newObject() Object { return Object{Glow: 1} }
 
-// itemObject makes the ground object of an item at a point: its kind is the dobjlist
+// ItemObject makes the ground object of an item at a point: its kind is the dobjlist
 // entry of the item's sprite.
-func (e *Env) itemObject(it items.Item, x, y, z int32) Object {
+func (e *Env) ItemObject(it items.Item, x, y, z int32) Object {
 	o := newObject()
 	o.Item = it
 	if d := e.Items.Item(it.Number); d != nil {
@@ -274,7 +245,7 @@ func SpawnItems(e *Env, objects []Object, row *tables.MapStats, sp *SpawnPoint) 
 		items.GoldPile(&it, int(sp.Index), e.Rand)
 		it.Flags |= items.FlagIdentified
 	}
-	objects, _ = CreateObject(objects, e.itemObject(it, sp.X, sp.Y, sp.Z))
+	objects, _ = CreateObject(objects, e.ItemObject(it, sp.X, sp.Y, sp.Z))
 	return objects
 }
 

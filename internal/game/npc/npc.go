@@ -13,7 +13,7 @@ const (
 // Kinds of NPC id (0x443b4f).
 const (
 	KindNPC      = 1 // 0..4999: the NPC table
-	KindHireling = 2 // 5000 and up: the street NPCs actors carry (M8)
+	KindHireling = 2 // 5000 and up: the street NPCs actors carry (no shipped actor has one)
 	KindNegative = 3
 )
 

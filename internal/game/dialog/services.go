@@ -107,8 +107,6 @@ func arcomageMenu() []Button {
 // one it has). They do nothing: the menu stays.
 func deferred(typ, code int) string {
 	switch {
-	case typ == TypeTownHall && code == SvcBounty:
-		return "the bounty hunt (0x4bd028 code 99, the monsters: M8)"
 	case code == SvcArcomagePlay:
 		return "Arcomage (msg 0x1d, M12)"
 	}
@@ -202,8 +200,11 @@ func (d *Dialog) service(code int) {
 	}
 	switch d.Type {
 	case TypeTownHall:
-		if code == SvcPayFine {
+		switch code {
+		case SvcPayFine:
 			d.Input = &GoldInput{}
+		case SvcBounty:
+			d.townHallBounty()
 		}
 		return
 	case TypeBank:

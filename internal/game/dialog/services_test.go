@@ -245,8 +245,8 @@ func TestBank(t *testing.T) {
 	}
 }
 
-// TestTownHall: Pay Fine takes what is typed, up to the fine and the gold; the bounty
-// hunt is M8's.
+// TestTownHall: Bounty Hunt opens its sub-menu (bounty_test.go has the hunt); Pay Fine
+// takes what is typed, up to the fine and the gold.
 //
 // mm8: 0x4b8364
 func TestTownHall(t *testing.T) {
@@ -254,9 +254,10 @@ func TestTownHall(t *testing.T) {
 	h.m.Fine = 300
 	d := openProprietor(t, h, 25)
 	clickService(d, SvcBounty)
-	if d.Menu != 1 || len(h.notes) == 0 {
+	if d.Menu != SvcBounty || len(h.notes) != 0 {
 		t.Errorf("bounty: menu %#x, notes %q", d.Menu, h.notes)
 	}
+	d.Back()
 	clickService(d, SvcPayFine)
 	d.EnterGold("500", true)
 	if h.m.Fine != 0 || h.m.Gold != 700 {

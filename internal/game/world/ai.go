@@ -27,7 +27,7 @@ func (w *World) brain() *monsters.Brain {
 		b.Outdoor = w.outdoor.geo
 	}
 	b.Rand = w.S.Ctx.Rand
-	b.Actors, b.Objects = dl.Actors, dl.Objects
+	b.Actors, b.Objects = dl.Actors, &dl.Objects
 	p, m := w.group, w.S.Party
 	b.Party = monsters.Party{X: p.X, Y: p.Y, Z: p.Z, Height: p.Height, EyeLevel: p.EyeLevel, Radius: p.Radius,
 		Dir: p.Dir, Flying: p.Flying, TurnBased: m.TurnBased, Members: m, Ctx: w.S.Ctx}

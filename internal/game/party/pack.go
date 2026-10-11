@@ -191,8 +191,8 @@ func (m *Members) AddItem(t *tables.Items, it items.Item, c *Ctx) bool {
 
 // DropMouseItem puts the item on the cursor into a pack: the selected member's, else
 // the first member's with room (every member's when none is selected). With no room
-// anywhere the original throws it in front of the party (an object, M8); here it stays
-// on the cursor. Reports whether the cursor is free.
+// anywhere it is thrown in front of the party (Throw). The cursor is free afterwards
+// (true) unless there is no Throw to take it.
 //
 // mm8: 0x4211c8
 func (m *Members) DropMouseItem(t *tables.Items) bool {
@@ -217,11 +217,17 @@ func (m *Members) DropMouseItem(t *tables.Items) bool {
 			return true
 		}
 	}
-	return false
+	if m.Throw == nil {
+		return false
+	}
+	it := m.MouseItem
+	m.MouseItem = items.Item{}
+	m.Throw(it)
+	return true
 }
 
-// SetMouseItem puts it on the cursor, the item there before going to a pack first (when
-// no pack has room the original throws that one on the ground, M8; here it is lost).
+// SetMouseItem puts it on the cursor, the item there before going to a pack first (or
+// thrown when no pack has room).
 //
 // mm8: 0x493779 (Party_SetMouseItem)
 func (m *Members) SetMouseItem(t *tables.Items, it items.Item) {

@@ -1,9 +1,12 @@
 package world
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
+	"libre-enroth/internal/assets/tables"
+	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
 )
@@ -85,8 +88,7 @@ func (w *World) RestFood() int {
 
 // RestEncounter rolls the map's random encounter for a night's rest: the chance in
 // MapStats (a random row's, 1..0x4d, when this map is not listed), then which of its
-// three monster types comes. It reports monsters that arrived; spawning them is M8c's,
-// so it is false for now, after drawing the same random numbers.
+// three monster types comes, and whether they found a place near the party.
 //
 // mm8: 0x42f877 (msg 0x61), 0x44f0da (Rest_SpawnEncounter)
 func (w *World) RestEncounter() bool {
@@ -115,12 +117,119 @@ func (w *World) RestEncounter() bool {
 			kind = 3
 		}
 	}
-	return w.spawnEncounter(kind)
+	return w.spawnEncounter(row, kind)
 }
 
-// spawnEncounter puts a group of monster type kind (1..3) of the map near the party
-// (M8).
-func (w *World) spawnEncounter(kind int) bool { return false }
+// Encounter placement (Rest_SpawnEncounter 0x44f0da).
+const (
+	encounterTries     = 100
+	encounterModelGap  = 0x100 // outdoors at least this beyond a model's radius
+	encounterFloorDrop = 0x400 // indoors a floor within this of the party's
+)
+
+// spawnEncounter brings monster type kind (1..3) of MapStats row to a random point near
+// the party, hostile; it reports false when it found no place in 100 tries (the 100th
+// counts as a failure too) or when no monster on the map that can act is of another
+// kind than classes 40, 41 and 44. Outdoors the point is 0x200..0x5ff away, on dry
+// ground and clear of the models; indoors 0x100..0x2ff away in the party's sector, on
+// a floor within 0x400 of its feet.
+//
+// mm8: 0x44f0da (Rest_SpawnEncounter)
+func (w *World) spawnEncounter(row *tables.MapStats, kind int) bool {
+	dl := w.delta()
+	if dl == nil {
+		return false
+	}
+	any := false
+	for i := range dl.Actors {
+		a := &dl.Actors[i]
+		switch c := (int(int16(a.Info.ID)) - 1) / 3; c {
+		case 0x28, 0x29, 0x2c:
+			continue
+		}
+		if a.CanAct() {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return false
+	}
+	rng := w.S.Ctx.Rand
+	p := w.group
+	sp := monsters.SpawnPoint{Radius: 0x20, Index: uint16(kind)}
+	point := func(span, base int32) {
+		r := int32(rng.Int())%span + base
+		ang := int32(rng.Int() % physics.FullTurn)
+		sp.X = p.X + physics.Mul16(r, physics.Cos(ang))
+		sp.Y = p.Y + physics.Mul16(r, physics.Cos(ang-physics.QuarterTurn))
+		sp.Z = p.Z
+	}
+	tries := 0
+	if w.outdoor != nil {
+		g := w.outdoor.geo
+		for tries < encounterTries {
+			tries++
+			point(0x400, 0x200)
+			z, water, _, _ := g.FloorZ(sp.X, sp.Y, p.Z, false, false)
+			sp.Z = z
+			if water {
+				continue
+			}
+			clear := true
+			for k := range g.Map.Models {
+				m := &g.Map.Models[k]
+				d := approxDist(abs32(sp.X-m.Center.X), abs32(sp.Y-m.Center.Y), 0)
+				if d < m.Radius+encounterModelGap {
+					clear = false
+					break
+				}
+			}
+			if clear {
+				break
+			}
+		}
+	} else {
+		g := w.indoor.geo
+		sector := g.SectorAt(p.X, p.Y, p.Z)
+		for tries < encounterTries {
+			tries++
+			point(0x200, 0x100)
+			if s := g.SectorAt(sp.X, sp.Y, p.Z); s == sector {
+				if z, _ := g.FloorZ(sp.X, sp.Y, sp.Z, s); z != physics.NoFloor {
+					sp.Z = z
+					if abs32(z-p.Z) < encounterFloorDrop+1 {
+						break
+					}
+				}
+			}
+		}
+	}
+	if tries == encounterTries {
+		return false
+	}
+	var err error
+	if dl.Actors, err = monsters.Spawn(w.monsterEnv(), dl.Actors, row, &sp, 0, 0, true); err != nil {
+		w.S.logf("%s: encounter: %v", w.name, err)
+	}
+	return true
+}
+
+// approxDist is Math_ApproxDist: max + mid * 11/32 + min / 4.
+func approxDist(a, b, c int32) int32 {
+	v := []int32{a, b, c}
+	sort.Slice(v, func(i, j int) bool { return v[i] > v[j] })
+	return v[0] + v[1]*11>>5 + v[2]>>2
+}
+
+// ResetActors implements ui.RestSite: an inn's night longer than 4 hours.
+//
+// mm8: 0x40928c (Actors_ResetAfterRest, from msg 0x199)
+func (w *World) ResetActors() {
+	if b := w.brain(); b != nil {
+		b.ResetAfterRest(w.S.Party.Calendar.Hour)
+	}
+}
 
 // statsRow is the MapStats.txt row with number n, nil when there is none.
 func (w *World) statsRow(n int) []string {
