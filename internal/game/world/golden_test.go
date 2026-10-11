@@ -1,3 +1,73 @@
+// Golden-image tests for the world: whole frames (the 3D view and the HUD over it) are
+// rendered in software and compared, by SHA-256, against hashes frozen in worldHashes.
+// Any change to what reaches the screen (renderer, map loading, lighting, sprites, the
+// UI, the actors' AI, the event interpreter, ...) shows up as a hash mismatch.
+//
+// The game data is needed: assettest.Dir reads $MM8_DATA (relative paths are taken from
+// the module root) and skips the test when it is unset.
+//
+// # Running
+//
+//	MM8_DATA=<data_path> go test ./internal/game/world -run Golden
+//	MM8_DATA=<data_path> go test ./internal/game/world -run Golden/d05_melee
+//	MM8_DATA=<data_path> go test ./internal/game/world -run Golden -update -v
+//
+// With -update nothing is compared: every view is written to <module>/out/world_<name>.png
+// and its hash is logged as a ready-to-paste `"name": "hash",` line for worldHashes. The
+// intended workflow is to look at the PNGs, and only when they look right copy the new
+// hashes in. A view missing from worldHashes always fails (want is "").
+//
+// # What one view does
+//
+// Each entry of views is a subtest. The setup is the same as the real game's:
+//
+//  1. newEnv (once for all views) opens the game data and loads the shared tables and
+//     texture cache.
+//  2. env.app builds a ui.App straight into StateInGame on view.mapName, with
+//     LoadWorld wired to world.Load over a UISession, i.e. the UI's party (the default
+//     one-member party), its RNG (MSVC rand() seeded with 1, so every run is
+//     deterministic), status line and global.txt. The mouse cursor is hidden.
+//  3. If the map opened with a dialogue (d05's OnMapReload makes Simon Templar speak),
+//     one Esc closes it, as a player would.
+//  4. FreeCamOn is set for the plain camera views (no input, no party), AIFrozen from
+//     view.frozen (F7: the monsters stand still in views about something else).
+//
+// Then the fields of the view pick one of three kinds of driving, applied in this order:
+//
+//   - setup / party / click: the whole in-game screen. setup runs on the loaded world
+//     (open a house, a dialogue, a chest, tweak the party's gold or skills, ...); party
+//     places the party at that camera (SetPartyFromCam, as -cam does in the game). One
+//     frame is composed first, so the screen has been laid out, then click (a ui.Script)
+//     is replayed through App.Update, one 60 Hz tick per Script step tick. Mouse moves,
+//     clicks, right-button popups and keys all go through the real UI and world update,
+//     so the AI, doors and events run for those ticks too.
+//   - input: a ui.Script fed to World.Update only (no HUD input), driving the party from
+//     the map's start: walking, turning, jumping, looking up and down (M4).
+//   - cam: a free camera (M3). Outdoors its Z is taken as height above the ground at
+//     (X, Y). With doorTicks set (indoors), every door is toggled and moved that many
+//     ticks before the shot.
+//
+// Last, the clock is set to view.hour:view.mins (outdoors this picks the sky and the
+// light) and the frame is composed at view.w x view.h and hashed.
+//
+// # Scripts
+//
+// click and input use ui.ParseScript: comma-separated "keys:ticks" steps, keys joined by
+// '+' or '-' for none. "Mouse@x/y:n" keeps the mouse at UI point (x, y) of the 640x480
+// UI for n ticks, "Click@x/y:n" also clicks the left button there, "Right@x/y:n" holds
+// the right button. E.g. "-:2,Click@555/160:1,Mouse@290/150:3" waits two ticks, clicks
+// the house's first service button, then hovers a shelf item for three ticks.
+//
+// # Composing a frame
+//
+// Compose is the software equivalent of engine.Game.Draw: display.Fit places the
+// 640x480 UI in the w x h target (largest uniform scale, centred), the world is
+// rendered into the viewport's screen rectangle at native resolution, and the UI canvas
+// is laid over it nearest-neighbour scaled, its transparent pixels letting the 3D view
+// through. The output is opaque black outside both.
+//
+// BenchmarkFrame at the end times World.Render alone (no UI) for an outdoor and an
+// indoor map at a few screen sizes.
 package world
 
 import (
