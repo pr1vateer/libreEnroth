@@ -567,6 +567,12 @@ func (g *inGame) memberText(p *party.Player) string {
 //
 // mm8: 0x4c96cd (GuiGame_Draw)
 func (g *inGame) Draw(c *gfx.Canvas) {
+	if g.world != nil {
+		if t, ok := g.world.(interface{ PartyThreat() (bool, bool) }); ok {
+			close, near := t.PartyThreat()
+			g.portraits.setThreat(close, near)
+		}
+	}
 	if g.char != nil || g.chest != nil || g.inn != nil {
 		// The screen's own draw, then the portrait panel with its basebar (a child of
 		// the screen with drawBasebar set), the status line and the pop-up.
