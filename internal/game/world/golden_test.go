@@ -211,57 +211,62 @@ type view struct {
 // Frozen SHA-256s of the composed frames (3D view and HUD). Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/world -run Golden -update
 var worldHashes = map[string]string{
-	"out01_spawn": "71560af86f0a8066d6a669f32268ac19868be21ac1bd45f44457e96803249cf0",
-	"out01_town":  "12133e575c9462cae497c419fdf032e7631d7093eae019f114940a4057f3b076",
-	"out01_sky":   "a5caaa4d4265bad848b159407492b0d09f981bf0743cf0cd95017b6007b52b68",
-	"out02_wide":  "cddbc4073a608b1aa5d0a6164a4453772e9e37d10e17a91b6126bd346827a001",
-	"d05_start":   "39151aeebcf3da875b8cc19cedcfb6b1bb2cb9a87112b19a108c20dc9749af38",
-	"d05_door":    "c3de256d2c17f28211c18b58b21b3529064da596003150fb95c3d77a79e6799e",
-	"d13_torch":   "bdede009ba188dc6ddc6ca43dde95a5bbb8a3271d0626b00d35d45edaa3e8110",
-	"d16_start":   "efc9c80d4785d80a7fe40205575a40e0622b53550d345e8c3f43211935373de2",
-	"d28_stairs":  "1745b0319d1ce32ae80ce30efd9067af0dd4a648b9d02d85759f947d6df0df77",
-	"d28_climb":   "e61b434fab1b2a818a6df159cea06345c7bc33cf8d2ea653cee177409322bc88",
-	"out01_run":   "1e621b8cee4a217e61d71d23071032cfef0d0ac58227afe3dddfe7d6d42cc7bf",
-	"d05_walk":    "0d411990e53e2b8089ff5dc45d8ad1dcb2dd3f645d6bf7abf9891fe7d1f45b3d",
-	"d05_click":   "a56ed09721ec0ea3c7058f825d1d08f4a5b4e1ae9d16ae40d1881d520d9153cd",
+	// The ready gem (M9a) is on every frame where a member can act, so these hashes
+	// moved when it appeared. d05_melee did not: that member is still recovering.
+	"out01_spawn": "b7443a6e5ab7cc51ab7ca2088578ac4a2bbdfbfa94213789141f382405cd3896",
+	"out01_town":  "5de7d4ece22f95185002f7ceebd167c06362977a0baa6949553a85494fe60923",
+	"out01_sky":   "fada3d73b1ea5c899d1bc0e46b37ec1f6fea731d3501f65a96fbb4e8a3bccae7",
+	"out02_wide":  "23f082a3ff0d3aa74540562bd75331c55d3d77c639c8b60fef1ad7d5f7bfdcda",
+	"d05_start":   "cd9969e1e22105b4c00eda27e3562bed0356099940abebe0d4b28cc11edc291d",
+	"d05_door":    "471c5791fb5fb1fac04e78de6e000adf76804e08f0b9c9548ce9abb4f7387232",
+	"d13_torch":   "859a4565f8032d037fe812392c380c109f7eb5f3ad9df54103b019be72235e86",
+	"d16_start":   "a61841f559b036e76eabc91bac11a1243e0a1eeb5c6e98f4ebee8f4ce1a48b89",
+	"d28_stairs":  "a71b56e6ea44dca941de20408a78c572ab906009755321d17f8e7ea5614e4422",
+	"d28_climb":   "e49f1c406b78c0a3a54c24a002db0d6c4b1971e07baecda230064adbb73b364c",
+	"out01_run":   "d90b2340594d60f14f879329c6aff22e1d6bb5efc235155e964e26ce27f63a3e",
+	"d05_walk":    "7f4c0b637a82f60ff21a1ec44cbe5c697a58256619504a774c33da5d776bd990",
+	"d05_click":   "a54e7f639bfdb5025828f0ef101228ddf150e4c06905e385d5483ba7f244bf0a",
 	// M6
-	"npc_dialog":     "2887d7d53a3f86848c059371d72d5e8ecc76091e65c1297e6944880e965ac94a",
-	"house_resident": "8a1d602c3ff48599bf4fed6ea9dbeb657dbc2f0c118ba6a191932d93a956b876",
-	"evt_message":    "95f2d6cd86d60db5d249adbba67277ef2424cd7b1109ef63c9937bd6cf932332",
+	"npc_dialog":     "7c092eaa98a128078c3388c307b6d7d066758b7927e130642adc36cf68d24202",
+	"house_resident": "7200b148ddc7117b2f8f3ed42a4a3ed313f1167e3b048840e5060b236731614a",
+	"evt_message":    "c861552eb63a190aaf061e57ce542de2925e6c9a8c21cb3aafabadbf9fa74a7e",
 	// M6c
-	"house_tavern":   "92d577f460ca99b9a23a25b6dfd78571d5dcd2d6ccea6aef8e67505e8b857b66",
-	"house_temple":   "f36ed53d89f27aaaa011e48ec083dfac3292f1c854f30c9ca52d5d076be0f4d2",
-	"house_bank":     "ed57489348e3fb469f1d9a15209d60ab73eb1dc2dfa42d0b95cfe0c3e4039464",
-	"house_stables":  "68d89186417c3af826de4f2f42d5801a51f2147271ba40a3e077439f78c0f27f",
-	"transition_d05": "028f4f90d84a1ba719c2cddfd5ad5fc0ca93dca83613606ff25e3553c28e69b1",
-	"edge_out02":     "d721897ec89a68958b95ffaf071f81dd956457a0b56154ef72a7efc4645384c8",
+	"house_tavern":   "44f4904206ecfa91960f34e0a78e612bd62df0ef6697fa16076585425350f4e6",
+	"house_temple":   "fadd5aafee938a1ba853114eaa723a6de512cad655ff1b1fa42c8b9fa236ccc4",
+	"house_bank":     "789d8815b0b61ab86f876e726fc8e23ed9fe5b5a330ba5ff0e09c71e1b28f451",
+	"house_stables":  "6d66e1d309311ce58b86c7f6089bfc8c10c387d62c6b4cdee10971a825448128",
+	"transition_d05": "a80d15c44568322f94aed86dfbea74a5f2ad42547bcaec0be0db49ef6d2f006d",
+	"edge_out02":     "9e878ff8db6bf1457bcfea95a3704dfa708d236726d86f489b571505a04f484d",
 	// M7b
-	"chest_open":  "c2622bfc8cde0d40f87c3c8e963e6cd81e882217feb3aca9abd9420ed51bc873",
-	"chest_popup": "3f7093e3a403ac80f2a15cb6ea2530d997ea7ad406890f14a32ca254b7e2794b",
+	"chest_open":  "815c30f04d31724f521d8915f53dddb2dc2a5b384c7d11c14e02145ddf258ebb",
+	"chest_popup": "a83ed2ac69954843744a0a5f325c9cdba0b98d21296916d7201af9e815d51ea3",
 	// M7c
-	"shop_weapon":    "cbb4ef9ff2b1a04aec0646a2f0b831317999529cf31fffce115eb5ce884c3fa5",
-	"shop_armor":     "d42478e123be7206875bb20575ab85fed524baf9904cbdf12544fa7aab47a686",
-	"shop_magic":     "bd80435c332f2e3f3b71d743701eb23675c721819f61a3408a27f3c813fbaab4",
-	"shop_alchemist": "d11835db565f4a405a02f77b481db034a50b7d9ec3b1aa6f970880f38bee5f92",
-	"guild_shelf":    "28a557afb717dd5cc2a5de73945fb1bf9c2ab5a5a9f10948984304f30bd5f4ea",
-	"shop_sell":      "04416850a246afb8c77088a7733166d50d3f26ad3713975271d9f1faa36dafb3",
-	"shop_popup":     "cbb4ef9ff2b1a04aec0646a2f0b831317999529cf31fffce115eb5ce884c3fa5",
+	"shop_weapon":    "eaa738b1074df9aa9ff3e38432a0f1b8d33c1bb398f7caff01426dee50343c40",
+	"shop_armor":     "e5102c8ddab255d85151460cfa5b6153c09470e906de0ffe82ba828fa3979475",
+	"shop_magic":     "f9b326ccec2d1b4387f047ba4be3fbcb12840bf6205d28cb28ac49ed6faae17d",
+	"shop_alchemist": "5dec8f2ede28c65436a6ae60677cf925e473dfceaa795dae5f8de771c431c3e5",
+	"guild_shelf":    "15663ba05185632b35862c5918c437fe31704a8055776e642383cac833d693ba",
+	"shop_sell":      "1a4492372a2350537d440abbad76987390479760b4a89eb404c5348c4ce15305",
+	"shop_popup":     "eaa738b1074df9aa9ff3e38432a0f1b8d33c1bb398f7caff01426dee50343c40",
 	// M7d
-	"house_learn":    "44bad96ad4163d71544e76a72b90e67af33f372319768078d361a5e0d9c137d5",
-	"house_training": "0dd41d711cea0e15442b1e7275c27b13ab58f49071fe6d5939cf61f37b2ad11a",
-	"teacher_topic":  "655fde40df79d5477b125598ba44b8d0215263d25a93b85d48ceab107d4eeb67",
-	"inn_roster":     "372b92c2515917b29a72149c83cbfebe1e3d19c3bbe62e9893837bf9ee12f308",
+	"house_learn":    "557e3a268f993d539c044262f1e5531065dec0016c19e7ff8558e24c820b98b8",
+	"house_training": "48434bf6b000d079099fe59d6860082afe68eaac9462ca44d002f75a008d5217",
+	"teacher_topic":  "c866769838e7b941975fd7f1d6adac7bddf0c95cc9e5e2d59ced8e7eedc80628",
+	"inn_roster":     "d8c3dfe74aed68dabc496c6df0be8dd2ee72aac534a0a289bcf07ab8fde8a43d",
 	// M8a
-	"out01_actors": "a5430f53e45d96a8dcfd22f00178d75fa5856aba85b0667d9ab1b7c3aaf29448",
-	"d05_spawned":  "83fad542b7c2cbbf5a3c07fe5ba552ce3759208e91e70cdc1e562f74371e5bcf",
-	"hover_actor":  "ccb0f972dbf4d7a1728e5bb109bbd3eca03b24e060644f0d03449c1ee24bbdde",
+	"out01_actors": "79c190cc835892399925f90f00a72f7698207aaa5f8276cc4c25dcb2543949df",
+	"d05_spawned":  "0ea10910fdde777b0e07feed2882ba8dd0856cff40869e3f9e903f7c18e0b61a",
+	"hover_actor":  "8210651bfc5394366527eb38b3ddc69e78191b9c34d6b604272e7807c36a3cd7",
 	// M8b
-	"out01_pursuit":  "78a99c952579021335145a5b60da0ad8da3556bae92a328bf47527dcfe12e45b",
+	"out01_pursuit":  "818d8f0e1712dac2f2440f6a8837cdc837d656817bc00d49fbda0774f515a3ee",
 	"d05_melee":      "813750eba21222aff0dd33aed92414bb78e6d5bbb356f623e6069747b1ccd975",
-	"ground_items":   "98dce6e6ac7d62560adef6e47c1f1e9c20911bdbf9692e4eed1db6f934bc2817",
-	"actor_dead":     "20d1c3ee131c5dc0c383bf3fa11420185b1577da08b5fb625c5e42b2c459692d",
-	"bounty_topic":   "ba2ce708284ae1d5c20a2e15d3205b808d8cc402caa0a8b2a3d8b21ac0d914bf",
-	"rest_encounter": "e688e03d66f7f5f489e510b3dd8811c556b77ae088a3439d88f0345b4ef4995d",
+	"ground_items":   "6580e5df4dd046108fde67535af5d8f5f6f3258da8bbb4762ea173c248e8ba24",
+	"actor_dead":     "404428d4c2e34e0c0a1597f584d9f75322361a946430d70d119f07779df63fac",
+	"bounty_topic":   "614764f89d0d2c8a21c961cd0844e9bb01799fb910e51824deb4f0bf20321a49",
+	"rest_encounter": "96f4ea3e656ac8565cbdf796df04f62b534686f8e301a66a87910aed926f0aa3",
+	// M9a
+	"melee_hit":  "b5cac47081865bb0a87fae3049eefafe4b4948f74977c22ff47ff42ffe4b2031",
+	"party_dead": "ef0001dc3d21775ff099aafa0459cde0978305bde486130aba4fa75b476f1268",
 }
 
 var views = []view{
@@ -433,6 +438,28 @@ var views = []view{
 		p.Dir = physics.Atan2(int32(a.Pos[0])-p.X, int32(a.Pos[1])-p.Y)
 		w.FreeCamOn = false
 	}, click: "Mouse@600/50:240", w: 640, h: 480, hour: 9},
+	// M9a: a blow on the guard in front of the party. The ready gem sits under the portrait.
+	{name: "melee_hit", mapName: "out01.odm", setup: func(w *World) {
+		w.FreeCamOn = false
+		i := nearestActor(w, 5880, 7500)
+		a := &w.Actors()[i]
+		a.Info.AC = 0
+		a.Info.Resist = [10]uint16{}
+		a.HP = 80
+		x, y := int32(a.Pos[0])-80, int32(a.Pos[1])
+		w.group.Teleport(x, y, int32(a.Pos[2]), physics.Atan2(int32(a.Pos[0])-x, int32(a.Pos[1])-y))
+		pl := &w.S.Party.Players[0]
+		pl.Name = "Zoltan"
+		pl.Skills = [party.NumSkills]uint16{}
+		pl.Skills[party.SkillUnarmed] = 60
+		pl.Equip = [party.NumSlots]int32{}
+	}, click: "A:1,-:25", w: 640, h: 480, hour: 9},
+	// M9a: the party is dead, so the temple in Jadame takes them back.
+	{name: "party_dead", mapName: "d05.blv", setup: func(w *World) {
+		w.FreeCamOn = false
+		w.S.Party.Players[0].Conditions[party.CondDead] = 1
+		w.S.Party.Players[0].HP = 0
+	}, click: "-:8", w: 640, h: 480, hour: 9},
 }
 
 // nearestActor is the living actor nearest to (x, y).

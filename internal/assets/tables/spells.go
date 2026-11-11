@@ -1,6 +1,7 @@
 package tables
 
 import (
+	"encoding/binary"
 	"strings"
 
 	"libre-enroth/internal/assets"
@@ -11,26 +12,40 @@ import (
 // NumSpells is the number of spells (ids 1..132; Txt_LoadSpells fills up to 0x4f72c3).
 const NumSpells = 132
 
-// Spell is what the monster code reads of a spell so far: its damage school
-// (spells.txt) and the damage dice compiled into the exe. The rest is M9's.
+// Spell is one spell: its school (spells.txt), the damage dice, the SP cost and
+// recovery of each mastery, and the object type a projectile of it launches.
 type Spell struct {
 	// School is the damage type of spells.txt's "Res" column (Txt_DamageType's
 	// numbering: fire 0, air 1, water 2, earth 3, none 4, magic 5, spirit 6, mind 7,
 	// body 8, light 9, dark 10).
 	School uint8
-	// Add and Sides are the damage: Add + skill d Sides (g_spellStats +0, +1).
+	// Add and Sides are the damage: Add + skill d Sides (the row's +0x10, +0x11).
 	Add, Sides uint8
-	// Flags are spells.txt's "Stats" letters (g_spellStats +2): m 1, e 2, c 4, x 8.
+	// Flags are spells.txt's "Stats" letters (the row's +0x12): m 1, e 2, c 4, x 8.
 	Flags uint8
+	// Cost and Recovery are one u16 per mastery, normal through grandmaster.
+	Cost, Recovery [4]uint16
+	// Object is the sprite a cast of it launches (the low half of the int at
+	// 0x4f6634 + 4*spell). 0 launches nothing.
+	Object int16
 }
 
 // Spells are the spells by id (index 0 unused).
 type Spells []Spell
 
-// Exe address of the spell stats (0x14 bytes per spell, from spell 0).
+// A spell row is 0x14 bytes at 0x4f6860: u16 cost[4], u16 recovery[4], then the
+// damage add, sides and flags (which 0x4f6870 is the first byte of). Object types
+// are a separate int per spell at 0x4f6634; the dispatcher reads the low 16 bits.
+// 0x4f6638, four bytes later, is spell 1's type. Wands index 0x4f7064 by item number.
 const (
-	vaSpellStats  = 0x4f6870
-	spellStatSize = 0x14
+	vaSpellRow  = 0x4f6860
+	spellRow    = 0x14
+	vaSpellObj  = 0x4f6634
+	vaWandSpell = 0x4f7064
+	// spellRows covers the projectile attacks past the 132 spells of spells.txt
+	// (0x85..0x89 are the bow, the blaster and a dragon's breath).
+	spellRows  = 0x8a
+	wandSpells = 177
 )
 
 // spellSchools are the "Res" names Txt_LoadSpells knows; anything else (none) is 4.
@@ -39,14 +54,20 @@ var spellSchools = map[string]uint8{
 	"light": 9, "dark": 10, "magic": 5,
 }
 
-// LoadSpells reads spells.txt and the exe's spell stats.
-func LoadSpells(d *assets.Data) (Spells, error) {
+// LoadSpells reads spells.txt and the exe's spell rows, object types and wand spells.
+func LoadSpells(d *assets.Data) (Spells, []int32, error) {
 	_, b, err := d.LangFile("spells.txt")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s := ParseSpells(b)
-	return s, s.readStats(d.Exe)
+	if len(s) < spellRows {
+		n := make(Spells, spellRows)
+		copy(n, s)
+		s = n
+	}
+	wands, err := s.readStats(d.Exe)
+	return s, wands, err
 }
 
 // ParseSpells reads spells.txt: two header lines, then the spells from id 1, with a
@@ -90,19 +111,37 @@ func ParseSpells(data []byte) Spells {
 	return out
 }
 
-// readStats fills the damage dice from the exe; spells.txt's letters are ORed into the
-// compiled flags.
-func (s Spells) readStats(im *exe.Image) error {
-	raw, err := im.Read(vaSpellStats, (NumSpells+1)*spellStatSize)
+// readStats fills costs, recovery and damage dice from the exe, and the object type.
+// spells.txt's letters are ORed into the compiled flags. It also returns the wand
+// item's spell (0x4f7064, indexed by item number).
+func (s Spells) readStats(im *exe.Image) ([]int32, error) {
+	raw, err := im.Read(vaSpellRow, len(s)*spellRow)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	objs, err := im.Read(vaSpellObj, len(s)*4)
+	if err != nil {
+		return nil, err
+	}
+	wraw, err := im.Read(vaWandSpell, wandSpells*4)
+	if err != nil {
+		return nil, err
 	}
 	for id := range s {
-		r := raw[id*spellStatSize:]
-		s[id].Add, s[id].Sides = r[0], r[1]
-		s[id].Flags |= r[2]
+		r := raw[id*spellRow:]
+		for k := range 4 {
+			s[id].Cost[k] = binary.LittleEndian.Uint16(r[2*k:])
+			s[id].Recovery[k] = binary.LittleEndian.Uint16(r[8+2*k:])
+		}
+		s[id].Add, s[id].Sides = r[0x10], r[0x11]
+		s[id].Flags |= r[0x12]
+		s[id].Object = int16(binary.LittleEndian.Uint16(objs[4*id:]))
 	}
-	return nil
+	wands := make([]int32, wandSpells)
+	for i := range wands {
+		wands[i] = int32(binary.LittleEndian.Uint32(wraw[4*i:]))
+	}
+	return wands, nil
 }
 
 // At is spell id, the zero Spell when out of range.

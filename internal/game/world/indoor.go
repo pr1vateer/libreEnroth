@@ -25,6 +25,7 @@ type Indoor struct {
 	faceU, faceV   [][]int16
 	faceDU, faceDV []int16
 	decLights      []render.PointLight // lights of decorations (Level_Load)
+	glow           []render.PointLight // spell objects' frame glow, set each frame
 	geo            *physics.IndoorGeo  // floors and collision for the party
 
 	// per-frame scratch
@@ -631,6 +632,9 @@ func (in *Indoor) faceLights(f *blv.Face, torch *render.PointLight) []render.Poi
 	}
 	for i := range in.decLights {
 		add(&in.decLights[i], false)
+	}
+	for i := range in.glow {
+		add(&in.glow[i], true)
 	}
 	if len(in.lightBuf) == start {
 		return nil

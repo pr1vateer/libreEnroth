@@ -121,8 +121,19 @@ func TestSpellsData(t *testing.T) {
 		{29, Spell{School: 4, Add: 9, Sides: 9, Flags: 5}},   // Acid Burst: "none"
 		{90, Spell{School: 10, Add: 25, Sides: 10, Flags: 7}},
 	} {
-		if got := s.At(c.id); got != c.want {
-			t.Errorf("spell %d: %+v, want %+v", c.id, got, c.want)
+		got := s.At(c.id)
+		if got.School != c.want.School || got.Add != c.want.Add || got.Sides != c.want.Sides || got.Flags != c.want.Flags {
+			t.Errorf("spell %d: school %d add %d sides %d flags %d, want %+v", c.id, got.School, got.Add, got.Sides, got.Flags, c.want)
 		}
+	}
+	bolt := s.At(2)
+	if bolt.Cost != [4]uint16{2, 2, 2, 2} || bolt.Recovery != [4]uint16{110, 110, 100, 90} || bolt.Object != 1010 {
+		t.Errorf("fire bolt cost %v recovery %v object %d", bolt.Cost, bolt.Recovery, bolt.Object)
+	}
+	if s.At(6).Object != 1050 || s.At(0x85).Object != 545 || s.At(0x89).Object != 1010 {
+		t.Errorf("objects fireball %d bow %d breath %d", s.At(6).Object, s.At(0x85).Object, s.At(0x89).Object)
+	}
+	if a.Wands[0x98] != 2 || a.Wands[0xa2] != 6 || a.Wands[0xb0] != 11 {
+		t.Errorf("wands %#x %#x %#x", a.Wands[0x98], a.Wands[0xa2], a.Wands[0xb0])
 	}
 }

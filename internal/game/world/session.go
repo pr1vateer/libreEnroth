@@ -43,6 +43,8 @@ type Session struct {
 	deferredNPC int
 	// timerScan is the game time of the last timer scan (0x587db0, Timers.Scan).
 	timerScan clock.Time
+	// reviveReset asks the next map load to send its actors home (a temple revival).
+	reviveReset bool
 	// lastDelta is the state of the last indoor and outdoor map entered: Map_IsAlert reads
 	// the location header of the other kind (0x44f967).
 	lastDelta [2]*delta.Delta

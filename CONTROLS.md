@@ -14,6 +14,9 @@
   - **PgUp/Insert** fly up/down, **Home** lands, **PgDn/Delete** look up/down, **End**
     centres the view.
   - **Space** interacts, **R** rests, **Enter** toggles turn-based mode.
+  - **A** attacks with the selected member (a blow in reach, a bow or a wand beyond it).
+    The gem under a portrait is green when that member can act, yellow when a hostile
+    monster is near and red when one is in reach.
   - **F3** switches to the old free camera (**W/S/A/D**, **Space/C** up and down, **Shift**
     faster, right-drag looks around); **F4/F5** toggle flying and water walking.
   - **F2** (indoors) opens every closed door and closes every open one.
@@ -23,7 +26,7 @@
     an NPC talks to it, and a click on a corpse searches it. A click in the view with an
     item on the mouse throws it there; an item no pack has room for falls before the party.
   - Monsters wander about their homes, hunt the party and each other, and strike in melee
-    (their missiles and spells come with M9); hostile monsters near keep the party from
+    (their missiles and spells come with the rest of combat); hostile monsters near keep the party from
     resting, and some come in the night. A long night at an inn sends them home.
   - **+/−** next to the minimap zoom it (outdoors).
   - **1–5** or a click on a portrait selects a party member; the selected member again

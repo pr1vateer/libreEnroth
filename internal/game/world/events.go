@@ -415,7 +415,7 @@ func (w *World) Click(x, y int) {
 			return
 		}
 	case pidActor:
-		if !w.clickActor(pid, depth, w.shift) {
+		if !w.clickActor(pid, depth, w.shift, x, y) {
 			return
 		}
 	case pidObject:

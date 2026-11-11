@@ -1,6 +1,10 @@
 package world
 
-import "math"
+import (
+	"math"
+
+	"libre-enroth/internal/render"
+)
 
 // Clock is the time of day the world is lit for, and the animation clock.
 type Clock struct {
@@ -85,6 +89,27 @@ const (
 // torchRange is the party light radius in units of 1024 at night without a light
 // spell (the game reads the Torch Light spell power, 1 when none).
 const torchRange = 1
+
+// GlowLight adds mobile lights to a brightness of 0..1. Each light contributes
+// (1 - distance/radius), capped at 1. Outdoors the lights are white.
+func GlowLight(base, x, y, z float64, lights []render.PointLight) float64 {
+	for i := range lights {
+		l := &lights[i]
+		if l.Radius <= 0 {
+			continue
+		}
+		dx, dy, dz := x-l.X, y-l.Y, z-l.Z
+		d := math.Sqrt(dx*dx + dy*dy + dz*dz)
+		if d >= l.Radius {
+			continue
+		}
+		base += (1 - d/l.Radius) * l.R
+		if base > 1 {
+			return 1
+		}
+	}
+	return base
+}
 
 // OutdoorLight is the vertex brightness (0..1) of a surface with shade dim at depth.
 //

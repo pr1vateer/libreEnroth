@@ -1,6 +1,9 @@
 package world
 
 import (
+	"strconv"
+	"strings"
+
 	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
@@ -38,6 +41,45 @@ func (w *World) brain() *monsters.Brain {
 type aiHost struct{ w *World }
 
 func (h aiHost) Stub(key, what string) { h.w.S.note(key, what) }
+
+// Announce is the damage line (ShowDamage, on unless the registry says otherwise).
+// A kill (0xaf) names the victim after the number; the other lines name the attacker,
+// then the victim, then the number.
+func (h aiHost) Announce(id int, attacker, target string, dmg int) {
+	var args []any
+	if id == 0xaf {
+		args = []any{attacker, dmg, target}
+	} else {
+		args = []any{attacker, target, dmg}
+	}
+	h.w.Status(fillFmt(h.w.Global(id), args...), 2)
+}
+
+// fillFmt replaces %s and %d/%u/%lu in order.
+func fillFmt(f string, args ...any) string {
+	out := f
+	for _, a := range args {
+		s := ""
+		switch v := a.(type) {
+		case string:
+			i := strings.Index(out, "%s")
+			if i < 0 {
+				continue
+			}
+			out = out[:i] + v + out[i+2:]
+			continue
+		case int:
+			s = strconv.Itoa(v)
+		}
+		for _, spec := range []string{"%lu", "%ld", "%u", "%d"} {
+			if i := strings.Index(out, spec); i >= 0 {
+				out = out[:i] + s + out[i+len(spec):]
+				break
+			}
+		}
+	}
+	return out
+}
 
 // monstersActive reports whether the monsters take their turn this frame.
 func (w *World) monstersActive() bool { return !w.AIFrozen && !w.S.Party.TurnBased }
@@ -87,7 +129,12 @@ func (w *World) strikeMonsters() {
 // actorObstacles are the map's actors as the party's sweeps meet them.
 type actorObstacles struct{ w *World }
 
-func (o actorObstacles) Collide(s *physics.State) { monsters.CollideActors(s, o.w.Actors()) }
+func (o actorObstacles) Collide(s *physics.State) {
+	monsters.CollideActors(s, o.w.Actors())
+	if b := o.w.brain(); b != nil {
+		b.CollideObjects(s, monsters.KindParty) // pid 4: the party walking into a projectile
+	}
+}
 
 // Bumped ends the party's invisibility.
 //

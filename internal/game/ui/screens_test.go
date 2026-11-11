@@ -80,11 +80,11 @@ var screenHashes = map[string]string{
 	"create_troll":       "59d6f2d6338bc274f785bf668fe0829cf6fee1c1646953426ea9fa157be93458",
 	"create_points":      "9340460383f833069cb53065edb86e30945689d37c44766bea64690b53f40cd2",
 	"create_fail":        "a89870f8ed4f94245865040d4bf77dd475b7579c2bee3e732a2c90d0dbf3329a",
-	"ingame":             "a39ab68f15e96477ad4a4933c2b8ce79861e0392229d260a40758290c638228b",
-	"ingame_party5_sel3": "8b6160b8edc2182e1d0e92817bbee9f503b2402ab988d96834d5abf6397bbe7d",
-	// rest_test.go
-	"rest_open":  "e73e09fff32821ad0fc3d46f6d6cfe43628c5c556a840f2314d0a9077125f431",
-	"hover_time": "c39d61b3728ff97cf140874e265d5c3f09fd84b892306f93b98affcc59d2223c",
+	"ingame":             "f24aea3e0f08512c3327c8fc3453cb519ee64edc717f917e6e78e018b14037fc",
+	"ingame_party5_sel3": "5d6f7b8af5b0c2e91357ada0a990b0a1c8262bb11e71e61c67694a9948ace394",
+	// rest_test.go. The ready gem (M9a) is under the portraits.
+	"rest_open":  "ddea98b9e61fab722cb68e310fa30408c78523e5b63c4044c2b708b31fa9af2b",
+	"hover_time": "0bd3bd6fa70c1330abf5667fe3167d72f07e114bb2358e0d010cf7a380cf4c69",
 }
 
 func TestScreens(t *testing.T) {

@@ -391,6 +391,9 @@ func (m *Members) mix(i int, slot int32, level, mastery int, first bool, c *Ctx,
 			p.BreakItems(0, c.Rand)
 		}
 		m.MouseItem = items.Item{}
+		if ex, ok := n.(interface{ PotionBlast(int) }); ok {
+			ex.PotionBlast(0x32b + int(r) - 1)
+		}
 		if first {
 			if p.CanAct() {
 				m.Speak(i, 0x11, c)

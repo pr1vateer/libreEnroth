@@ -81,7 +81,7 @@ func (b *Brain) Die(i int) {
 			int32(a.Pos[2])+reagentRise, speed, 1, true, 0)
 	}
 	if a.Info.Special == specialExplode {
-		b.stub("explode", "Actor_Explode 0x404a87: a dying monster's blast (object 600, M9)")
+		b.Explode(i)
 	}
 }
 

@@ -71,8 +71,12 @@ type portraits struct {
 	// pictures, and their x per slot.
 	manafrm                *gfx.Sprite
 	barG, barY, barR, barB *gfx.Sprite
+	gemG, gemY, gemR       *gfx.Sprite
 	hpBarX, spBarX         []int32
 	ctx                    *party.Ctx
+	// threatClose and threatNear are g_partyFlags 0x10 and 0x20: the gem is red, yellow
+	// or green.
+	threatClose, threatNear bool
 
 	shown    []int // per member: the party.Player.Portrait result to draw
 	subTicks int
@@ -97,6 +101,7 @@ func newPortraits(l *loader, ct *Container) *portraits {
 	}
 	p.manafrm = l.icon("manafrm", false)
 	p.barG, p.barY, p.barR, p.barB = l.icon("manaG", false), l.icon("manaY", false), l.icon("manaR", false), l.icon("manaB", false)
+	p.gemG, p.gemY, p.gemR = l.icon("statG", false), l.icon("statY", false), l.icon("statR", false)
 	p.hpBarX = l.exeInts(vaHPBarX, party.MaxMembers)
 	p.spBarX = l.exeInts(vaSPBarX, party.MaxMembers)
 	ctx, err := r.Ctx()
@@ -183,9 +188,9 @@ func (p *portraits) update() {
 	p.m.TickExpressions(p.pft, ticks, p.rng)
 }
 
-// draw draws the faces, the ring around the selected member, the bars' frames, the
-// shields over the empty slots and the HP and SP bars. The ready gem (0x4ca970) and the
-// buff icon are M9's.
+// draw draws the faces, the ring around the selected member, the ready gems, the bars'
+// frames, the shields over the empty slots and the HP and SP bars. The buff icon is
+// drawn with the other spell icons.
 //
 // mm8: 0x4ca371 (GuiPortraits_Draw)
 func (p *portraits) draw(c *gfx.Canvas) {
@@ -204,6 +209,7 @@ func (p *portraits) draw(c *gfx.Canvas) {
 	if s := p.m.Selected; s >= 1 && s <= party.MaxMembers {
 		c.BlitKeyed(p.selring, portraitX[s-1], portraitY)
 	}
+	p.drawGems(c)
 	for i := range p.m.Players {
 		c.BlitKeyed(p.manafrm, manafrmX[i], manafrmY)
 	}
@@ -213,6 +219,35 @@ func (p *portraits) draw(c *gfx.Canvas) {
 		}
 	}
 	p.drawBars(c)
+}
+
+// setThreat records whether a hostile actor is in a blow's reach or within 0x1400.
+func (p *portraits) setThreat(close, near bool) { p.threatClose, p.threatNear = close, near }
+
+// drawGems draws the ready gem on each member who can act and is not recovering.
+// Red when a hostile actor is within a blow's reach, yellow within 0x1400, else green.
+// Turn-based mode draws none.
+//
+// mm8: 0x4ca970
+func (p *portraits) drawGems(c *gfx.Canvas) {
+	if p.m.TurnBased {
+		return
+	}
+	gem := p.gemG
+	if p.threatClose {
+		gem = p.gemR
+	} else if p.threatNear {
+		gem = p.gemY
+	}
+	if gem == nil {
+		return
+	}
+	for i := range p.m.Players {
+		pl := &p.m.Players[i]
+		if pl.CanAct() && pl.Recovery == 0 {
+			c.BlitKeyed(gem, portraitX[i]-8, 0x1ca)
+		}
+	}
 }
 
 // drawBars draws each member's HP bar (green above half, yellow above a quarter, red

@@ -19,6 +19,7 @@ import (
 	"libre-enroth/internal/game/monsters"
 	"libre-enroth/internal/game/party"
 	"libre-enroth/internal/game/physics"
+	"libre-enroth/internal/game/spells"
 	"libre-enroth/internal/game/ui"
 	"libre-enroth/internal/render"
 )
@@ -161,6 +162,8 @@ type World struct {
 	r                      render.Renderer
 	cam                    render.Camera
 	subTicks               int
+	casts                  spells.Queue
+	mx, my                 int
 	// openChest is the chest an OpenChest event opened, until the screen closes.
 	openChest *ui.ChestView
 	// ai is the monsters' AI state (ai.go).
@@ -243,6 +246,7 @@ func Load(d *assets.Data, tables *Tables, tex *TextureCache, name string, s *Ses
 		return nil, err
 	}
 	w.enter()
+	w.reviveActors()
 	return w, nil
 }
 
@@ -372,6 +376,9 @@ func (w *World) Update(in *ui.Input) {
 	w.timers.Scan(m.Time, &w.S.timerScan, func(id, step int) { w.vm.Run(evt.Source{Kind: evt.SourceMap}, id, step, true) })
 	if !m.TurnBased && m.UpdateTime(ticks, w.S.Ctx) {
 		w.PartyDead = true
+		w.syncClock()
+		w.partyDied()
+		return
 	}
 	w.syncClock()
 	if in.Pressed(ui.KeyF3) {
@@ -390,14 +397,20 @@ func (w *World) Update(in *ui.Input) {
 		w.group.WaterWalk = !w.group.WaterWalk
 	}
 	w.shift = in.Down(ui.KeyShift)
+	w.mx, w.my = in.X, in.Y
 	w.debugKeys(in)
 	if w.FreeCamOn {
 		w.Cam.Update(in)
+		w.casts.Dispatch(spellHost{w})
 		w.thinkMonsters(int32(ticks))
 		w.moveObjects(int32(ticks))
 		w.moveMonsters(int32(ticks))
 	} else {
+		if in.Pressed('A') {
+			w.attack(in.X, in.Y)
+		}
 		w.movePartyKeys(in)
+		w.casts.Dispatch(spellHost{w})
 		w.thinkMonsters(int32(ticks))
 		w.moveObjects(int32(ticks))
 		w.moveParty(int32(ticks))
@@ -571,13 +584,16 @@ func (w *World) Render(f *render.Frame) {
 	f.EnablePick()
 	w.frame = f
 	f.Clear(render.RGB(0, 0, 0))
+	glow := w.spellLights()
 	if w.outdoor != nil {
 		w.cam.Focal = FocalOutdoor * s
 		w.cam.Far = distMist
 		w.cam.Prepare()
 		w.r.Begin(f, &w.cam)
 		sun := SunAt(w.Clock.Hour, w.Clock.Minute)
-		light := func(x, y, z, depth float64, sector int) float64 { return sun.OutdoorLight(0, depth) }
+		light := func(x, y, z, depth float64, sector int) float64 {
+			return GlowLight(sun.OutdoorLight(0, depth), x, y, z, glow)
+		}
 		w.outdoor.Draw(&w.r, &w.cam, w.Clock,
 			func() { w.drawActors(&w.r, &w.cam, w.Clock, light) },
 			func() { w.drawObjects(&w.r, &w.cam, light) })
@@ -588,6 +604,7 @@ func (w *World) Render(f *render.Frame) {
 		w.cam.Far = indoorFar
 		w.cam.Prepare()
 		w.r.Begin(f, &w.cam)
+		w.indoor.glow = glow
 		w.indoor.Draw(&w.r, &w.cam, f, w.Clock, func(torch *render.PointLight) {
 			light := func(x, y, z, depth float64, sector int) float64 {
 				return w.indoor.billboardLight(sector, x, y, z, torch)

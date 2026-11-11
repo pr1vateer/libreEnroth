@@ -249,7 +249,7 @@ func (p *Party) MoveOutdoor(g *physics.OutdoorGeo, ticks int32) {
 		}
 		g.CollideModels(&s, true, true)
 		g.CollideCellDecorations(&s, cellX, cellY)
-		// Collide_Objects (projectiles hitting the party) is M9's.
+		// Collide_Objects (0x46efd6) runs with the actors, pid 4.
 		if p.Obstacles != nil {
 			p.Obstacles.Collide(&s)
 		}

@@ -13,18 +13,19 @@ import (
 // Frozen SHA-256s of the character screen scenes. Regenerate with:
 // MM8_DATA=../games_mm8 go test ./internal/game/ui -run CharScreens -update
 var charHashes = map[string]string{
-	"char_stats":        "990a0469a3016d9bcaaba587a74b7302d918645012a623a8b22e74c129a9a811",
-	"char_skills":       "739ac46d4c66ee86ccc377ec99edf854aec9683eb7f180b8dd234f6836d6d013",
-	"char_awards":       "d5099f1b3216ad90b9f3c1974d9244496a90ff9fee99676cd2d0e9953bcc2b05",
-	"char_inventory":    "2baf9877cb9ec67830a8fafd54814ad7368d25150381a6583cbe76d8201e0236",
-	"char_jewelry":      "fe392ecd39319e5557dadc1eade7aa99025441487f254afe2c5d5f4d53254473",
-	"char_cleric":       "ce664ad507e4e04488adba6a02057fb9197096bed0590f4b1ce8544af6575259",
-	"char_minotaur":     "e26126fa697c2fd2a8b6a0855791a257db69b7c7425d8be2ac760a23047c638c",
-	"char_troll":        "2c8b83c8fc661e9bf35ca11c8a89910e6b9412d3063c102c031459c65fe9e99c",
-	"item_popup":        "a7992b4d9fc59f83c3ac7a8cf6ad5590e8d2cbc3845e74e9289febb62e93dd08",
-	"item_popup_broken": "63a895dfa2370404d3eafa6182deb191fba4251dd0e2221ca2cda1ec961d93e4",
-	"skill_popup":       "c178682341ff262e35cd7d79ba6a153dd044786ab2c831e1cecc3d51e9609d4d",
-	"stat_popup":        "bba8c0919e0c3d5c18a68a3dac2f30faac42e0d4f0ee7007689f48619ca710b8",
+	// The ready gem (M9a) sits under each portrait that can act.
+	"char_stats":        "22bea5b80e57f0d3cf87a48b9512c977088102dd77dd8b5f2c3dc9a15a8c46f7",
+	"char_skills":       "e78171ffe29328fcaa3cc33c189788bf86439e6ece852475f3f4eba3b5430a99",
+	"char_awards":       "90d95eb6883127a658aab7007e7f942a13cb9fbeb0dcc0b996afbee92d7de7b0",
+	"char_inventory":    "048157ce3d1ea74cf8034ae743178845a19ceff0ee7c45cdea0bcae0c6da1a69",
+	"char_jewelry":      "ef790334bd22f86049d3b7d0e676b7a40d6e0a186712745c3c5e6a557db1f98c",
+	"char_cleric":       "97aa17e547c8990a166c4fb2f187dfba6262943fb52c8177d963dd76e8be7115",
+	"char_minotaur":     "f3cd67b69a03046207e85a9717691cf072dd22b95389b265367001a2d3a322e6",
+	"char_troll":        "3ed09cf8f6c772757279814b9e538c0ff24d9f8aa7545dceb616e95ef5e51bae",
+	"item_popup":        "3fc6addb3b886e608b6b0d469c884868a0ee1f6cc7c05077bc8eb064fb528394",
+	"item_popup_broken": "0a77e84633c7bf28371f6c9cedbd2b2f195d1d8ec6df76f420d1530927d3b353",
+	"skill_popup":       "ed1e5c668c109b4c55b4b2996836ce0939f4b99bdeb3f8d83465584593687d5a",
+	"stat_popup":        "113e5ff6abc89467f5575e63ed9278a99c2d0e4ae0fc5cfb9e37d0d13d58e347",
 }
 
 // wear puts item id on member p in equipment slot (identified unless flags say).

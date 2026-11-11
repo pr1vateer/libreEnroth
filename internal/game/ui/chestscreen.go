@@ -83,6 +83,12 @@ type chestNotes struct{ s *chestScreen }
 func (n chestNotes) Global(i int) string             { return n.s.r.GlobalText(i) }
 func (n chestNotes) Status(text string, seconds int) { n.s.r.Status.Show(text, seconds) }
 func (n chestNotes) Stub(key, what string)           { n.s.r.note(key, what) }
+func (n chestNotes) PotionBlast(kind int) {
+	if w, ok := n.s.g.world.(interface{ PotionBlast(int) }); ok {
+		w.PotionBlast(kind)
+	}
+}
+
 func (n chestNotes) AutonoteText(i int) bool {
 	if w, ok := n.s.g.world.(interface{ AutonoteText(int) bool }); ok {
 		return w.AutonoteText(i)

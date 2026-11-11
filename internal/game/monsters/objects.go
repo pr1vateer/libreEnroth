@@ -40,10 +40,19 @@ func CreateObject(objects []Object, o Object) ([]Object, int) {
 // Launch puts o into the first free slot (ObjList 0) of objects, growing the list
 // when the slot is past its end, starting where it is and moving at speed along yaw
 // and pitch. An object without a dobjlist entry is not made (-1), nor one past the
-// 1000th slot. (A member's spell starting beside the party is M9's.)
+// 1000th slot. member 0 (a throw, a monster's shot) does not step aside.
 //
 // mm8: 0x42eaea (Object_Create)
 func Launch(objects []Object, o Object, yaw, pitch, speed int32) ([]Object, int) {
+	return LaunchFor(objects, o, yaw, pitch, speed, 0, nil)
+}
+
+// LaunchFor is Launch with Object_Create's member step. member is the roster id
+// plus one. Slots 0 and 1 step 0x18 to the left of the facing, slot 2 steps 8
+// ahead, slots 3 and 4 step 0x18 to the right. roster is the party's roster ids.
+//
+// mm8: 0x42eaea (the member offset)
+func LaunchFor(objects []Object, o Object, yaw, pitch, speed, member int32, roster []int) ([]Object, int) {
 	if o.ObjList == 0 {
 		return objects, -1
 	}
@@ -70,7 +79,31 @@ func Launch(objects []Object, o Object, yaw, pitch, speed int32) ([]Object, int)
 	} else {
 		objects[slot] = o
 	}
+	shiftMember(&objects[slot], member, roster)
 	return objects, slot
+}
+
+// shiftMember moves a member's projectile out from the party's centre.
+func shiftMember(o *Object, member int32, roster []int) {
+	slot := -1
+	for i, id := range roster {
+		if int32(id) == member-1 {
+			slot = i
+			break
+		}
+	}
+	var dist, yaw int32
+	switch slot {
+	case 0, 1:
+		dist, yaw = 0x18, int32(int16(o.Yaw))+physics.QuarterTurn
+	case 2:
+		dist, yaw = 8, int32(int16(o.Yaw))
+	case 3, 4:
+		dist, yaw = 0x18, int32(int16(o.Yaw))-physics.QuarterTurn
+	default:
+		return
+	}
+	o.Pos[0], o.Pos[1], o.Pos[2] = offsetPoint(dist, yaw, 0, o.Pos[0], o.Pos[1], o.Pos[2])
 }
 
 // DropItem makes count objects of kind sprite (an item's sprite) carrying it at a point,
@@ -148,7 +181,7 @@ func (b *Brain) MoveObjects(ticks int32) {
 			continue
 		}
 		if o.Attrib&objFollows != 0 {
-			b.stub("follow", "Objects_Update 0x472b60: spell effects riding on their caster (M9)")
+			b.rideObject(o, dt)
 			continue
 		}
 		if o.ObjList == 0 || int(o.ObjList) >= len(b.Tables.ObjList) {
@@ -158,18 +191,45 @@ func (b *Brain) MoveObjects(ticks int32) {
 		o.Time += uint16(dt)
 		if k.Flags&tables.ObjLifetime != 0 && (int16(o.Time) < 0 || int16(o.Time) >= lifetime(o, k)) {
 			if int16(o.Time) >= 0 && k.Flags&tables.ObjFlagOnIntercept != 0 {
-				b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+				b.Impact(i, uint32(i)<<3|KindObject)
 				continue
 			}
 			removeObject(o)
 			continue
 		}
 		if b.Indoor != nil {
-			b.moveObjectIndoor(o, k, dt, dtFixed)
+			b.moveObjectIndoor(i, o, k, dt, dtFixed)
 		} else if b.Outdoor != nil {
-			b.moveObjectOutdoor(o, k, dt, dtFixed)
+			b.moveObjectOutdoor(i, o, k, dt, dtFixed)
 		}
-		// In turn-based mode a projectile further than 0x1400 from the party goes (M9).
+		if o.ObjList != 0 && b.Party.TurnBased && o.Attrib&objTurnBased != 0 &&
+			approxDist3(b.Party.X-o.Pos[0], b.Party.Y-o.Pos[1], b.Party.Z-o.Pos[2]) > 0x1400 {
+			removeObject(o)
+		}
+	}
+}
+
+// rideObject sticks an object to its caster actor and still ages it. Past its
+// lifetime it is removed, without an impact.
+//
+// mm8: 0x472b60 (attrib 0x80)
+func (b *Brain) rideObject(o *Object, dt int32) {
+	if o.Caster&7 == KindActor {
+		i := int(o.Caster >> 3)
+		if i >= 0 && i < len(b.Actors) {
+			a := &b.Actors[i]
+			o.Pos[0] = int32(a.Pos[0])
+			o.Pos[1] = int32(a.Pos[1])
+			o.Pos[2] = int32(int16(a.Height)) + int32(a.Pos[2])
+		}
+	}
+	if o.ObjList == 0 || b.Tables == nil || int(o.ObjList) >= len(b.Tables.ObjList) {
+		return
+	}
+	k := &b.Tables.ObjList[o.ObjList]
+	o.Time += uint16(dt)
+	if k.Flags&tables.ObjLifetime != 0 && (int16(o.Time) < 0 || int16(o.Time) >= lifetime(o, k)) {
+		removeObject(o)
 	}
 }
 
@@ -214,11 +274,20 @@ func slow(o *Object) bool {
 // object against all of them (radius: indoors their dmonlist to-hit radius, outdoors
 // their own); an actor's misses its own kind (M9).
 func (b *Brain) collideObjectActors(st *physics.State, o *Object, indoor bool) {
+	caster := -1
 	if o.Caster&7 == KindActor {
-		b.stub("objcaster", "Objects_Move: an actor's projectile against the other actors (M9)")
-		return
+		caster = int(o.Caster >> 3)
 	}
 	for j := range b.Actors {
+		if caster >= 0 && caster < len(b.Actors) {
+			if indoor {
+				if tables.Class(b.Actors[caster].ID()) == tables.Class(b.Actors[j].ID()) {
+					continue
+				}
+			} else if Relation(b.Tables, &b.Actors[caster], &b.Actors[j]) == 0 {
+				continue
+			}
+		}
 		r := int32(0)
 		if indoor {
 			if ml := int(b.Actors[j].MonList) - 1; ml >= 0 && ml < len(b.Tables.MonList) {
@@ -226,6 +295,44 @@ func (b *Brain) collideObjectActors(st *physics.State, o *Object, indoor bool) {
 			}
 		}
 		b.collideActor(st, j, r)
+	}
+}
+
+// CollideObjects is a sweep against objects whose kind flags lack bit 2. A NoPickup
+// kind (0x10) takes the impact. The object does not shorten the sweep: walking
+// through it is not a wall.
+//
+// mm8: 0x46efd6 (Collide_Objects), 0x46e11b (Collide_TouchObject)
+func (b *Brain) CollideObjects(st *physics.State, pid uint32) {
+	if b.Tables == nil || st == nil {
+		return
+	}
+	for i, o := range b.objects() {
+		if o.ObjList == 0 || int(o.ObjList) >= len(b.Tables.ObjList) {
+			continue
+		}
+		k := &b.Tables.ObjList[o.ObjList]
+		if k.Flags&2 != 0 {
+			continue
+		}
+		r, h := int32(k.Radius), int32(k.Height)
+		if st.BBox[0] > o.Pos[0]+r || o.Pos[0]-r > st.BBox[1] || st.BBox[2] > o.Pos[1]+r || o.Pos[1]-r > st.BBox[3] ||
+			st.BBox[4] > h+o.Pos[2] || o.Pos[2] > st.BBox[5] {
+			continue
+		}
+		dx, dy := o.Pos[0]-st.PosLo[0], o.Pos[1]-st.PosLo[1]
+		side := (st.Dir[1]*dx - st.Dir[0]*dy) >> 16
+		if abs32(side) > st.RadiusLo+r {
+			continue
+		}
+		along := (st.Dir[1]*dy + st.Dir[0]*dx) >> 16
+		if along <= 0 || along >= st.AdjustedDist {
+			continue
+		}
+		zAt := st.PosLo[2] + physics.Mul16(along, st.Dir[2])
+		if o.Pos[2]-st.RadiusLo <= zAt && zAt <= o.Pos[2]+st.RadiusLo+h && k.Flags&tables.ObjNoPickup != 0 {
+			b.Impact(i, pid)
+		}
 	}
 }
 
@@ -260,7 +367,7 @@ func bounceObject(o *Object, st *physics.State, n [3]int32) {
 // and the actors, bouncing off what it meets.
 //
 // mm8: 0x4716af (Objects_MoveIndoor, the item path)
-func (b *Brain) moveObjectIndoor(o *Object, k *tables.ObjListEntry, dt, dtFixed int32) {
+func (b *Brain) moveObjectIndoor(i int, o *Object, k *tables.ObjListEntry, dt, dtFixed int32) {
 	g := b.Indoor
 	if abs32(o.Pos[0]) > objectMaxX || abs32(o.Pos[1]) > objectMaxX || abs32(o.Pos[2]) > objectMaxZ {
 		removeObject(o)
@@ -282,8 +389,7 @@ func (b *Brain) moveObjectIndoor(o *Object, k *tables.ObjListEntry, dt, dtFixed 
 	grav := int16(physics.Gravity(false)) * int16(dt)
 	if k.Flags&tables.ObjNoGravity == 0 {
 		if o.Pos[2]-3 < floorZ {
-			if k.Flags&tables.ObjFlagOnIntercept != 0 {
-				b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+			if k.Flags&tables.ObjFlagOnIntercept != 0 && b.Impact(i, 0) == 0 {
 				return
 			}
 			o.Pos[2] = floorZ + 1
@@ -328,8 +434,7 @@ func (b *Brain) moveObjectIndoor(o *Object, k *tables.ObjListEntry, dt, dtFixed 
 		o.Pos[2] += physics.Mul16(st.Dir[2], adj)
 		o.Sector = int16(st.Sector)
 		st.TotalMoved += adj
-		if k.Flags&tables.ObjFlagOnIntercept != 0 {
-			b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+		if k.Flags&tables.ObjFlagOnIntercept != 0 && b.Impact(i, uint32(st.PID)) == 0 {
 			return
 		}
 		pid := uint32(st.PID)
@@ -370,7 +475,7 @@ func (b *Brain) moveObjectIndoor(o *Object, k *tables.ObjListEntry, dt, dtFixed 
 // through the models, the decorations of its cell, the party and the actors.
 //
 // mm8: 0x472047 (Objects_MoveOutdoor, the item path)
-func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed int32) {
+func (b *Brain) moveObjectOutdoor(i int, o *Object, k *tables.ObjListEntry, dt, dtFixed int32) {
 	g := b.Outdoor
 	steep := g.TooSteep(o.Pos[0], o.Pos[1])
 	floorZ, water, _, _ := g.FloorZ(o.Pos[0], o.Pos[1], o.Pos[2], false, false)
@@ -382,7 +487,7 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 	case z1 < o.Pos[2]:
 		hits = 1
 	case water:
-		b.splash()
+		b.Splash(o.Pos[0], o.Pos[1], o.Pos[2])
 		removeObject(o)
 		return
 	}
@@ -400,8 +505,7 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 			o.Vel[1] += int16(uint32(n[1]*d) >> 16)
 			o.Vel[2] += int16(physics.Mul16(n[2], d))
 		default:
-			if k.Flags&tables.ObjFlagOnIntercept != 0 {
-				b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+			if k.Flags&tables.ObjFlagOnIntercept != 0 && b.Impact(i, 0) == 0 {
 				return
 			}
 			o.Pos[2] = z1
@@ -419,8 +523,8 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 		}
 	}
 	if k.Flags&tables.ObjFlagOnIntercept != 0 && (o.Pos[2] <= floorZ || o.Pos[0] < -outdoorEdge || o.Pos[0] > outdoorEdge ||
-		o.Pos[1] < -outdoorEdge || o.Pos[1] > outdoorEdge || o.Pos[2] > outdoorMaxZ) {
-		b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+		o.Pos[1] < -outdoorEdge || o.Pos[1] > outdoorEdge || o.Pos[2] > outdoorMaxZ) && b.Impact(i, 0) == 0 {
+		removeObject(o)
 		return
 	}
 	st := objectSweep(k)
@@ -439,7 +543,7 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 		b.collideObjectActors(&st, o, false)
 		nz := st.NewPosLo[2] - st.RadiusLo - 1
 		if fz, wet, _, _ := g.FloorZ(st.NewPosLo[0], st.NewPosLo[1], nz, false, false); wet && nz < fz+splashHeight {
-			b.splash()
+			b.Splash(o.Pos[0], o.Pos[1], o.Pos[2])
 			removeObject(o)
 			return
 		}
@@ -452,8 +556,7 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 		o.Pos[2] += physics.Mul16(st.Dir[2], adj)
 		o.Sector = int16(st.Sector)
 		st.TotalMoved += adj
-		if k.Flags&tables.ObjFlagOnIntercept != 0 {
-			b.stub("impact", "Object_Impact 0x46bd3a: a projectile's end (M9)")
+		if k.Flags&tables.ObjFlagOnIntercept != 0 && b.Impact(i, uint32(st.PID)) == 0 {
 			return
 		}
 		pid := uint32(st.PID)
@@ -479,10 +582,4 @@ func (b *Brain) moveObjectOutdoor(o *Object, k *tables.ObjListEntry, dt, dtFixed
 	}
 	o.Pos = [3]int32{st.NewPosLo[0], st.NewPosLo[1], st.NewPosLo[2] - st.RadiusLo - 1}
 	o.Sector = int16(st.Sector)
-}
-
-// splash is the splash of something sinking (Splash_Spawn 0x42ee72, an effect object:
-// M9).
-func (b *Brain) splash() {
-	b.stub("splash", "Splash_Spawn 0x42ee72: the splash of something sinking (M9)")
 }

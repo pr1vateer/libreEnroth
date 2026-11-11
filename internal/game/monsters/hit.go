@@ -61,7 +61,7 @@ func (b *Brain) Strike() {
 	for k := range b.attacks.n {
 		at := &b.attacks.a[k]
 		if !at.single || at.pid&7 != KindActor {
-			b.stub("area", "AttackList_Process 0x4373e5: area blows and object attackers (M9)")
+			b.areaStrike(at)
 			continue
 		}
 		ai := int(at.pid >> 3)
@@ -97,6 +97,73 @@ func (b *Brain) Strike() {
 		}
 	}
 	b.attacks.n = 0
+}
+
+// areaStrike hits everyone the blow can see inside its reach: the party at
+// reach+0x20 (including the caster) and each actor at reach+radius. An actor
+// caster skips actors of relation 0. The radius is the whole test; nothing scales
+// the damage down with distance.
+//
+// mm8: 0x4373e5 (AttackList_Process, flag bit 1 clear)
+func (b *Brain) areaStrike(at *attack) {
+	pid := at.pid
+	casterKind := pid & 7
+	caster := int(pid >> 3)
+	var obj *Object
+	if casterKind == KindObject {
+		objs := b.objects()
+		if caster >= 0 && caster < len(objs) {
+			obj = &objs[caster]
+			casterKind = uint32(obj.Caster) & 7
+			caster = int(obj.Caster >> 3)
+		}
+	}
+	p := &b.Party
+	dx, dy := p.X-at.x, p.Y-at.y
+	dz := (p.Height >> 1) - at.z + p.Z
+	r := at.reach + 0x20
+	if uint32(dz*dz+dy*dy+dx*dx) < uint32(r*r) &&
+		b.CanSeePoints(p.X, p.Y, p.EyeLevel+p.Z, at.x, at.y, at.z) &&
+		b.Party.Members != nil {
+		for i := range b.Party.Members.Players {
+			pl := &b.Party.Members.Players[i]
+			if pl.Conditions[party.CondDead] != 0 || pl.Conditions[party.CondStoned] != 0 ||
+				pl.Conditions[party.CondEradicated] != 0 {
+				continue
+			}
+			if obj != nil {
+				b.spellOnParty(int(at.pid>>3), i)
+			} else if casterKind == KindActor && caster >= 0 && caster < len(b.Actors) {
+				b.HitMember(caster, at.typ, i)
+			}
+		}
+	}
+	for ti := range b.Actors {
+		t := &b.Actors[ti]
+		if !t.CanAct() {
+			continue
+		}
+		if casterKind == KindActor && caster >= 0 && caster < len(b.Actors) &&
+			Relation(b.Tables, &b.Actors[caster], t) == 0 {
+			continue
+		}
+		rr := at.reach + int32(int16(t.Radius))
+		dx, dy := int32(t.Pos[0])-at.x, int32(t.Pos[1])-at.y
+		dz := int32(int16(t.Height)>>1) - at.z + int32(t.Pos[2])
+		if uint32(dz*dz+dy*dy+dx*dx) >= uint32(rr*rr) ||
+			!b.CanSeePoints(int32(t.Pos[0]), int32(t.Pos[1]), int32(t.Pos[2])+0x32, at.x, at.y, at.z) {
+			continue
+		}
+		v := normalize(dx, dy, dz)
+		switch {
+		case obj != nil && casterKind == KindParty:
+			b.hitFromObject(int(at.pid>>3), ti, v)
+		case obj != nil && casterKind == KindActor:
+			b.HitActor(uint32(caster)<<3|KindActor, ti, v, int(obj.CasterAbility))
+		case casterKind == KindActor:
+			b.HitActor(uint32(caster)<<3|KindActor, ti, v, at.typ)
+		}
+	}
 }
 
 // normalize scales a vector to 16.16 unit length.
@@ -438,8 +505,8 @@ func (b *Brain) HitMember(ai, typ, member int) {
 			if a.HP < 1 {
 				b.Die(ai)
 				b.Aggro(ai, true)
-				if a.Info.Exp != 0 {
-					b.stub("exp", "Party_AwardExp 0x4255bb: experience for a kill (M9)")
+				if a.Info.Exp != 0 && m != nil {
+					m.AwardExp(int(a.Info.Exp), c)
 				}
 				speech := 0x33
 				if b.rand()%100 < 20 {
@@ -536,5 +603,5 @@ func (b *Brain) HitActor(src uint32, ti int, v [3]int32, typ int) {
 			t.Vel[n] = int16(physics.Mul16(v[n], k)) * 0x32
 		}
 	}
-	// 0x4394c9 shows the hit's spark (M9).
+	b.HitEffect(ti, 1, got)
 }

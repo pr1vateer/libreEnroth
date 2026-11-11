@@ -145,7 +145,7 @@ func (p *Party) MoveIndoor(g *physics.IndoorGeo, ticks int32) {
 			g.CollideFaces(&s, true, true)
 			g.CollideDecorations(&s)
 			if p.Obstacles != nil {
-				p.Obstacles.Collide(&s)
+				p.Obstacles.Collide(&s) // actors, and Collide_Objects (0x46efd6)
 			}
 			if !g.CollidePortals(&s) {
 				break

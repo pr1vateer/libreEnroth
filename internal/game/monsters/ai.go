@@ -58,6 +58,7 @@ const (
 	BuffHaste           = 18
 	BuffPainReflection  = 19
 	BuffHammerhands     = 20
+	BuffACHalved        = 21 // a party's to-hit halves the armour class (0x425f2b)
 	BuffNoSpells        = 22 // only the first attack
 	BuffHalfDamage      = 23
 	BuffNoFarAttacks    = 24 // no attacks beyond 0x400
@@ -579,7 +580,14 @@ func (b *Brain) think(i int, dt int32) {
 //
 // mm8: 0x404bc6 (Actor_LaunchMissile), 0x404e2f (Actor_CastSpell)
 func (b *Brain) launch(i int, dir *Dir, missile uint8, second bool) {
-	b.stub("launch", "Actor_LaunchMissile 0x404bc6: monster missiles (M9)")
+	if dir == nil {
+		return
+	}
+	s := 0
+	if second {
+		s = 1
+	}
+	b.LaunchMissile(i, *dir, int(missile), s)
 }
 
 func (b *Brain) cast(i int, dir *Dir, spell uint8, slot int, skill uint16) {

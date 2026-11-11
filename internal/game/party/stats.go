@@ -189,11 +189,13 @@ const (
 
 // Player buffs the formulas read.
 const (
+	BuffHammerhands  = 6  // unarmed blows add its power as body damage (0x4378ec)
+	BuffHaste        = 7  // attack recovery is 25 lower (0x48f237)
 	BuffReflect      = 10 // a monster's blow is dealt back to it (0x438625)
 	BuffPreservation = 11 // HP at 0 or below leaves the player unconscious, not dead
 	BuffRegeneration = 12
 	BuffMerchant     = 24 // replaces the merchant skill level with its power
-	BuffPainReflect  = 26 // physical damage does nothing
+	BuffPainReflect  = 26 // physical damage does nothing; a blow the member swings also misses (0x4378ec)
 )
 
 // Env is what the stat formulas read besides the player: the tables, the party's buffs

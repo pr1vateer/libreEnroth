@@ -294,7 +294,7 @@ func (b *Brain) MoveIndoor(ticks int32) {
 				g.CollideFaces(&st, true, false)
 				g.CollideDecorations(&st)
 				st.SweepParty(b.Party.X, b.Party.Y, b.Party.Z, b.Party.Radius, b.Party.Height, false)
-				// Collide_Objects (projectile impacts) is M9's.
+				b.CollideObjects(&st, uint32(i)<<3|KindActor)
 				touches += b.collideOthers(&st, i, true)
 				if !g.CollidePortals(&st) {
 					break
@@ -420,13 +420,14 @@ func (b *Brain) MoveOutdoor(ticks int32) {
 			g.CollideModels(&st, true, false)
 			g.CollideCellDecorations(&st, physics.GridX(int32(a.Pos[0])), physics.GridY(int32(a.Pos[1])))
 			st.SweepParty(b.Party.X, b.Party.Y, b.Party.Z, b.Party.Radius, b.Party.Height, false)
+			b.CollideObjects(&st, uint32(i)<<3|KindActor)
 			crowded := b.collideOthers(&st, i, false) > 1
 			nz := st.NewPosLo[2] - st.RadiusLo - 1
 			fz, _, _, _ := g.FloorZ(st.NewPosLo[0], st.NewPosLo[1], nz, false, false)
 			if water && nz < fz+splashHeight {
 				switch a.AIState {
 				case Dead, Dying, Removed, Disabled:
-					b.stub("splash", "Splash_Spawn 0x42ee72: a sinking corpse's splash (M9)")
+					b.Splash(int32(a.Pos[0]), int32(a.Pos[1]), int32(a.Pos[2]))
 					a.AIState = Removed
 					return
 				}

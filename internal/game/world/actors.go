@@ -475,8 +475,9 @@ func (w *World) drawActors(r *render.Renderer, cam *render.Camera, clk Clock, li
 }
 
 // drawObjects queues the ground objects: by their sft frame and time, the view from
-// their yaw; a centred frame lowers the sprite by half its height. NoDraw kinds and the
-// spell effects (types 500..599, 1000..12999, M9) are left out.
+// their yaw; a centred frame lowers the sprite by half its height. NoDraw kinds are
+// left out. Spell objects (500..599, 1000..12999, indoor traps 0x32b..0x32e) use the
+// same billboard; a frame glow is a mobile light gathered before the draw.
 //
 // mm8: 0x47bca5 (Outdoor_AddObjectBillboards), 0x43dff2 (Indoor_AddObjectBillboards)
 func (w *World) drawObjects(r *render.Renderer, cam *render.Camera, light func(x, y, z, depth float64, sector int) float64) {
@@ -492,9 +493,6 @@ func (w *World) drawObjects(r *render.Renderer, cam *render.Camera, light func(x
 		}
 		kind := &mt.ObjList[o.ObjList]
 		if kind.Flags&tables.ObjNoDraw != 0 {
-			continue
-		}
-		if t := o.Type; t >= 1000 && t <= 12999 || t >= 500 && t <= 599 || w.indoor != nil && t >= 0x32b && t <= 0x32e {
 			continue
 		}
 		fi := sft.At(int(kind.SFT), int(o.Time))
@@ -637,7 +635,7 @@ func (w *World) clickObject(pid uint32, depth float64) bool {
 	return w.pickUp(i, false)
 }
 
-func (w *World) clickActor(pid uint32, depth float64, shift bool) bool {
+func (w *World) clickActor(pid uint32, depth float64, shift bool, x, y int) bool {
 	i := pidIndex(pid)
 	acts, mt := w.Actors(), w.monsterTables()
 	if i >= len(acts) || mt == nil {
@@ -656,7 +654,7 @@ func (w *World) clickActor(pid uint32, depth float64, shift bool) bool {
 		return false
 	}
 	if monsters.Relation(mt, a, nil) != 0 || a.Flags&monsters.FlagHostile != 0 {
-		w.S.note("attack", "Evt_Click on a hostile actor: msg 0x17, attack (M9)")
+		w.attack(x, y)
 		return false
 	}
 	if depth >= clickDepth {
@@ -768,4 +766,47 @@ func (w *World) debugKeys(in *ui.Input) {
 	if b := w.brain(); b != nil {
 		b.Die(best)
 	}
+}
+
+// spellObject is a projectile, spell sprite or chest-trap burst: the kinds the
+// billboard pass used to skip, and the ones whose frame glow becomes a light.
+func spellObject(t int16, indoor bool) bool {
+	if t >= 500 && t <= 599 || t >= 1000 && t <= 12999 {
+		return true
+	}
+	return indoor && t >= 0x32b && t <= 0x32e
+}
+
+// spellLights are the mobile lights of glowing spell objects. Radius is the
+// object's glow times the frame's. Indoors the colour is the dobjlist particle;
+// outdoors it is white. A zero colour is white either way.
+func (w *World) spellLights() []render.PointLight {
+	dl, mt := w.delta(), w.monsterTables()
+	if dl == nil || mt == nil || w.tables == nil || w.tables.SFT == nil {
+		return nil
+	}
+	sft := w.tables.SFT
+	indoor := w.indoor != nil
+	var out []render.PointLight
+	for i := range dl.Objects {
+		o := &dl.Objects[i]
+		if o.ObjList <= 0 || int(o.ObjList) >= len(mt.ObjList) || !spellObject(o.Type, indoor) {
+			continue
+		}
+		kind := &mt.ObjList[o.ObjList]
+		fi := sft.At(int(kind.SFT), int(o.Time))
+		if fi < 0 || fi >= len(sft.Frames) {
+			continue
+		}
+		rad := int(o.Glow) * sft.Frames[fi].Glow
+		if rad == 0 {
+			continue
+		}
+		r, g, b := byte(255), byte(255), byte(255)
+		if indoor {
+			r, g, b = kind.Particle[0], kind.Particle[1], kind.Particle[2]
+		}
+		out = append(out, pointLight(float64(o.Pos[0]), float64(o.Pos[1]), float64(o.Pos[2]), rad, r, g, b))
+	}
+	return out
 }
